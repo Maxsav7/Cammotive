@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Camotive Detailing | Premium Mobile Detailing in San Antonio",
-  description: "Book premium mobile interior, exterior, polishing, and ceramic coating services from Camotive Detailing in San Antonio, Texas.",
+  description: "Schedule convenient mobile detailing and paint protection in Stone Oak, Alamo Heights, The Dominion, Leon Springs, Downtown, and across San Antonio.",
   metadataBase: new URL("https://camotive-detailing.sites.openai.com"),
   openGraph: {
     title: "Camotive Detailing",

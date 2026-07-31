@@ -143,7 +143,7 @@ export default function Home() {
           <span><b>CAMOTIVE</b><small>DETAILING</small></span>
         </button>
         <nav aria-label="Main navigation">
-          {["services", "booking", "reviews", "about"].map((tab) => (
+          {["services", "booking", "coverage", "reviews"].map((tab) => (
             <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => scrollTo(tab)}>
               {tab === "booking" ? "Book" : tab}
             </button>
@@ -158,12 +158,12 @@ export default function Home() {
       <section className="hero" id="home">
         <div className="hero-glow" />
         <div className="hero-copy">
-          <p className="eyebrow"><span /> Premium mobile detailing · San Antonio</p>
-          <h1>Clean cars<br /><em>get attention.</em></h1>
-          <p className="hero-lede">High-end detailing delivered to your driveway. From daily drivers to luxury finishes, we bring back the feeling of a brand-new car.</p>
+          <p className="eyebrow"><span /> We come to you · San Antonio</p>
+          <h1>Protect your paint.<br /><em>Save your time.</em></h1>
+          <p className="hero-lede">Professional mobile detailing at your home or workplace. We restore gloss, protect your finish, and save you the drive across town.</p>
           <div className="hero-actions">
-            <button className="button" onClick={() => scrollTo("booking")}>Book your detail <span>→</span></button>
-            <button className="watch-link" onClick={() => scrollTo("services")}><span>▶</span> Explore services</button>
+            <button className="button hero-primary" onClick={() => scrollTo("booking")}>Schedule My Detail <span>→</span></button>
+            <button className="coverage-button" onClick={() => scrollTo("coverage")}>View Mobile Coverage Area</button>
           </div>
           <div className="trust-row">
             <div><strong>5.0</strong><span className="stars">★★★★★</span><small>6 Google reviews</small></div>
@@ -213,7 +213,7 @@ export default function Home() {
         </div>
         <div className="booking-shell">
           <div className="booking-progress">
-            {["Service", "Date & time", "Your details", "Confirmed"].map((label, index) => (
+            {["Select service", "Choose date & time", "Vehicle & contact info"].map((label, index) => (
               <div className={step >= index + 1 ? "done" : ""} key={label}><span>{step > index + 1 ? "✓" : index + 1}</span><small>{label}</small></div>
             ))}
           </div>
@@ -266,10 +266,42 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="coverage section" id="coverage">
+        <div className="coverage-copy">
+          <p className="eyebrow"><span /> San Antonio mobile service</p>
+          <h2>Professional detailing,<br />wherever you park.</h2>
+          <p>Camotive brings professional-grade products, equipment, and paint protection directly to homes and workplaces throughout the San Antonio area.</p>
+          <div className="location-facts">
+            <div><small>Service base</small><strong>San Antonio, Texas</strong><span>Mobile service · No public storefront</span></div>
+            <div><small>Availability</small><strong>Appointments from 8 AM</strong><span>Residential and workplace service</span></div>
+          </div>
+          <button className="button" onClick={() => scrollTo("booking")}>Check availability →</button>
+        </div>
+        <div className="coverage-map" aria-label="Stylized map of Camotive's San Antonio service area">
+          <div className="map-road road-one" /><div className="map-road road-two" /><div className="map-road road-three" />
+          {[["Stone Oak", "north"], ["The Dominion", "northwest"], ["Leon Springs", "west"], ["Alamo Heights", "central"], ["Downtown", "downtown"]].map(([name, position]) => <div className={`map-pin ${position}`} key={name}><i /><span>{name}</span></div>)}
+          <div className="coverage-radius"><b>CAMOTIVE</b><small>Mobile coverage</small></div>
+        </div>
+        <div className="neighborhood-list">
+          <p>Popular service areas</p>
+          {["Stone Oak", "Alamo Heights", "The Dominion", "Leon Springs", "Downtown San Antonio"].map((area, index) => <div key={area}><span>0{index + 1}</span><strong>{area}</strong><i>Mobile service</i></div>)}
+          <p className="coverage-note">Outside these areas? Contact us—we may still be able to come to you.</p>
+        </div>
+      </section>
+
       <section className="reviews section" id="reviews">
         <div className="section-heading"><div><p className="eyebrow"><span /> Client approved</p><h2>Five stars. Every time.</h2></div><div className="google-score"><b>G</b><span><strong>5.0</strong><i>★★★★★</i><small>6 reviews on Google</small></span></div></div>
         <div className="review-grid">{reviews.slice(0, 3).map((review, index) => <article key={`${review.author}-${index}`}><div className="quote">“</div><div className="review-stars">★★★★★</div><p>{review.text}</p><footer><span>{review.author.slice(0, 1)}</span><div><b>{review.author}</b><small>{review.time ?? "Google review"}</small></div><i>G</i></footer></article>)}</div>
         <a className="google-link" href="https://www.google.com/search?q=camotive+detailing" target="_blank" rel="noreferrer">Read all reviews on Google ↗</a>
+      </section>
+
+      <section className="faq section" id="faq">
+        <div className="faq-heading"><p className="eyebrow"><span /> Before we arrive</p><h2>Common questions.</h2><p>Everything you need to know before your mobile detail.</p></div>
+        <div className="faq-list">
+          <details><summary>How long does a full detail take?<span>+</span></summary><p>Most full details take approximately 3–5 hours. Timing depends on vehicle size, condition, selected add-ons, and the level of restoration needed. We&apos;ll confirm the expected timeframe before beginning.</p></details>
+          <details><summary>Do you need access to water or electricity?<span>+</span></summary><p>Please have a standard outdoor water connection and electrical outlet available within reasonable reach of the vehicle. If that is not possible, contact us before booking so we can confirm what your location requires.</p></details>
+          <details><summary>What is your rain policy?<span>+</span></summary><p>Light weather may not affect interior-only services, but rain or unsafe conditions can require rescheduling exterior work. Camotive will contact you as early as possible and move your appointment to the next suitable opening at no rescheduling charge.</p></details>
+        </div>
       </section>
 
       <section className="appointment section" id="appointment">
