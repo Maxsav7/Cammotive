@@ -139,11 +139,10 @@ export default function Home() {
     <main>
       <header className="site-header">
         <button className="brand" onClick={() => scrollTo("home")} aria-label="Camotive home">
-          <span className="brand-mark">C</span>
-          <span><b>CAMOTIVE</b><small>DETAILING</small></span>
+          <img src="/camotive-logo-original.png" alt="Camotive Detailing" />
         </button>
         <nav aria-label="Main navigation">
-          {["services", "booking", "coverage", "reviews"].map((tab) => (
+          {["services", "coverage", "reviews", "faq"].map((tab) => (
             <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => scrollTo(tab)}>
               {tab === "booking" ? "Book" : tab}
             </button>
@@ -151,7 +150,7 @@ export default function Home() {
         </nav>
         <div className="header-actions">
           <button className="text-button" onClick={() => scrollTo("appointment")}>My appointment</button>
-          <a className="button button-small" href="tel:+12105730671">Call now</a>
+          <button className="button button-small" onClick={() => scrollTo("booking")}>Book now</button>
         </div>
       </header>
 
@@ -171,16 +170,17 @@ export default function Home() {
             <div><strong>SA</strong><small>Locally owned</small></div>
           </div>
         </div>
-        <div className="hero-visual" aria-hidden="true">
-          <div className="car-silhouette">
-            <div className="windshield" />
-            <div className="body-line" />
-            <div className="headlight" />
-            <div className="wheel wheel-one"><i /></div>
-            <div className="wheel wheel-two"><i /></div>
-          </div>
-          <div className="detail-card"><span>✦</span><div><b>Mirror finish</b><small>Professional-grade products</small></div></div>
+        <div className="hero-visual">
+          <img src="/og.png" alt="Freshly detailed black performance car" />
+          <div className="visual-shade" />
+          <div className="detail-card"><span>✦</span><div><b>Professional paint care</b><small>Detailed at your home or workplace</small></div></div>
         </div>
+      </section>
+
+      <section className="confidence-strip" aria-label="Why choose Camotive">
+        <div><span>01</span><p><strong>We come to you</strong><small>Home or workplace appointments</small></p></div>
+        <div><span>02</span><p><strong>Upfront estimates</strong><small>Clear packages and add-ons</small></p></div>
+        <div><span>03</span><p><strong>Paint-safe process</strong><small>Professional products and care</small></p></div>
       </section>
 
       <section className="services section" id="services">
@@ -311,12 +311,13 @@ export default function Home() {
       </section>
 
       <section className="about section" id="about">
-        <div className="about-mark"><span>C</span></div>
+        <div className="about-mark"><img src="/camotive-logo-original.png" alt="Camotive Detailing original logo" /></div>
         <div><p className="eyebrow"><span /> From Camotive Detailing</p><h2>Precision lives<br />in the details.</h2></div>
         <div><p>Camotive Detailing is a premium mobile detailing service based in San Antonio, Texas. We specialize in interior and exterior detailing, paint enhancement polishing, ceramic coatings, and maintenance details.</p><div className="socials"><a href="https://www.instagram.com/camotivedetailing/" target="_blank" rel="noreferrer">Instagram ↗</a><a href="https://www.tiktok.com/@camotivedetailing" target="_blank" rel="noreferrer">TikTok ↗</a><a href="tel:+12105730671">(210) 573-0671</a></div></div>
       </section>
 
-      <footer className="footer"><div className="brand"><span className="brand-mark">C</span><span><b>CAMOTIVE</b><small>DETAILING</small></span></div><p>Premium mobile detailing in San Antonio, Texas.</p><button onClick={() => scrollTo("home")}>Back to top ↑</button></footer>
+      <footer className="footer"><div className="brand"><img src="/camotive-logo-original.png" alt="Camotive Detailing" /></div><p>Premium mobile detailing in San Antonio, Texas.</p><button onClick={() => scrollTo("home")}>Back to top ↑</button></footer>
+      <button className="mobile-booking-cta" onClick={() => scrollTo("booking")}>Schedule My Detail <span>→</span></button>
     </main>
   );
 }
