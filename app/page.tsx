@@ -61,6 +61,7 @@ export default function Home() {
   const [lookupCode, setLookupCode] = useState("");
   const [lookupResult, setLookupResult] = useState<Record<string, string> | null>(null);
   const [reviews, setReviews] = useState(fallbackReviews);
+  const [bookingError, setBookingError] = useState("");
 
   useEffect(() => {
     fetch("/api/reviews")
@@ -93,6 +94,7 @@ export default function Home() {
 
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setBookingError("");
     const form = new FormData(event.currentTarget);
     const payload = {
       packageId: selectedPackage,
@@ -114,7 +116,15 @@ export default function Home() {
       body: JSON.stringify(payload),
     });
     const result = await response.json();
-    setBooking({ ...payload, confirmationCode: result.confirmationCode });
+    if (!response.ok || !result.confirmationCode) {
+      setBookingError("We couldn’t complete the booking. Please call or text (210) 573-0671.");
+      return;
+    }
+    setBooking({
+      ...payload,
+      confirmationCode: result.confirmationCode,
+      notificationStatus: result.notifications?.configured ? "sent" : "pending",
+    });
     setStep(4);
   }
 
@@ -242,11 +252,14 @@ export default function Home() {
               <label className="wide">Service address<input name="address" required placeholder="Street address, San Antonio, TX" /></label>
               <label className="wide">Reminder preference<select name="reminder" defaultValue="text"><option value="text">Text me 24 hours before</option><option value="email">Email me 24 hours before</option><option value="both">Text and email me</option></select></label>
             </div>
+            {bookingError && <p className="form-error" role="alert">{bookingError}</p>}
             <div className="booking-footer"><div><small>{packages[selectedPackage].name} · {formatDate(date)} at {time}</small><strong>${total} estimated</strong></div><button className="button" type="submit">Confirm appointment →</button></div>
           </form>}
           {step === 4 && booking && <div className="confirmation">
             <div className="checkmark">✓</div><p className="eyebrow">You&apos;re on the calendar</p><h3>Your detail is booked.</h3>
-            <p>We&apos;ll send your confirmation and reminder to the contact details you provided.</p>
+            <p>{booking.notificationStatus === "sent"
+              ? "A thank-you email and text are on their way. Cam has also been notified of your new appointment."
+              : "Your appointment is saved. Please call or text Camotive to confirm while messaging setup is being completed."}</p>
             <div className="confirmation-card"><div><small>Confirmation</small><strong>{booking.confirmationCode}</strong></div><div><small>When</small><strong>{formatDate(booking.date)} · {booking.time}</strong></div><div><small>Service</small><strong>{booking.packageName}</strong></div><div><small>Estimate</small><strong>${booking.total}</strong></div></div>
             <button className="outline-button" onClick={() => { setLookupCode(booking.confirmationCode); scrollTo("appointment"); }}>View my appointment</button>
           </div>}

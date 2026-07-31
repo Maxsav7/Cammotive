@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { sendBookingNotifications } from "./notifications";
 
 type AppointmentInput = {
   packageId: string; packageName: string; addOns: string; date: string; time: string;
@@ -38,7 +39,8 @@ export async function POST(request: Request) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(confirmationCode, data.packageId, data.packageName, data.addOns, data.date, data.time, Number(data.total), data.name, data.email, data.phone, data.vehicle, data.address, data.reminder)
     .run();
-  return Response.json({ confirmationCode });
+  const notifications = await sendBookingNotifications({ ...data, confirmationCode });
+  return Response.json({ confirmationCode, notifications });
 }
 
 export async function GET(request: Request) {
