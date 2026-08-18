@@ -35,11 +35,7 @@ const addOns = {
   engine: ["Engine bay clean + dress", 40],
 } as const;
 
-const fallbackReviews = [
-  { author: "Marcus R.", rating: 5, text: "The attention to detail was incredible. My interior looks brand new, and they came right to my driveway.", time: "Google review" },
-  { author: "Isabella T.", rating: 5, text: "Professional, punctual, and the finish on my SUV was flawless. Already booked my maintenance detail.", time: "Google review" },
-  { author: "Daniel C.", rating: 5, text: "Camotive brought the depth back to my paint. The difference before and after was unreal.", time: "Google review" },
-];
+type Review = { author: string; authorUrl?: string | null; authorPhoto?: string | null; rating: number; text: string; time: string; reviewUrl?: string | null };
 
 const times = ["8:00 AM", "10:30 AM", "1:30 PM", "4:00 PM"];
 
@@ -60,13 +56,19 @@ export default function Home() {
   const [booking, setBooking] = useState<Record<string, string> | null>(null);
   const [lookupCode, setLookupCode] = useState("");
   const [lookupResult, setLookupResult] = useState<Record<string, string> | null>(null);
-  const [reviews, setReviews] = useState(fallbackReviews);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewSummary, setReviewSummary] = useState<{ rating: number | null; count: number | null; profileUrl: string }>({ rating: null, count: null, profileUrl: "https://www.google.com/search?q=camotive+detailing+san+antonio&ludocid=11765857279964552273" });
   const [bookingError, setBookingError] = useState("");
 
   useEffect(() => {
     fetch("/api/reviews")
       .then((response) => response.json())
-      .then((data) => data.reviews?.length && setReviews(data.reviews))
+      .then((data) => {
+        if (data.source === "google") {
+          setReviews(data.reviews ?? []);
+          setReviewSummary({ rating: data.rating ?? null, count: data.reviewCount ?? null, profileUrl: data.profileUrl });
+        } else if (data.profileUrl) setReviewSummary((current) => ({ ...current, profileUrl: data.profileUrl }));
+      })
       .catch(() => undefined);
   }, []);
 
@@ -165,7 +167,7 @@ export default function Home() {
             <button className="coverage-button" onClick={() => scrollTo("coverage")}>View Mobile Coverage Area</button>
           </div>
           <div className="trust-row">
-            <div><strong>5.0</strong><span className="stars">★★★★★</span><small>6 Google reviews</small></div>
+            <div><strong>{reviewSummary.rating?.toFixed(1) ?? "5.0"}</strong><span className="stars">★★★★★</span><small>{reviewSummary.count ? `${reviewSummary.count} Google reviews` : "Google Business Profile"}</small></div>
             <div><strong>100%</strong><small>Mobile service</small></div>
             <div><strong>SA</strong><small>Locally owned</small></div>
           </div>
@@ -290,9 +292,9 @@ export default function Home() {
       </section>
 
       <section className="reviews section" id="reviews">
-        <div className="section-heading"><div><p className="eyebrow"><span /> Client approved</p><h2>Five stars. Every time.</h2></div><div className="google-score"><b>G</b><span><strong>5.0</strong><i>★★★★★</i><small>6 reviews on Google</small></span></div></div>
-        <div className="review-grid">{reviews.slice(0, 3).map((review, index) => <article key={`${review.author}-${index}`}><div className="quote">“</div><div className="review-stars">★★★★★</div><p>{review.text}</p><footer><span>{review.author.slice(0, 1)}</span><div><b>{review.author}</b><small>{review.time ?? "Google review"}</small></div><i>G</i></footer></article>)}</div>
-        <a className="google-link" href="https://www.google.com/search?q=camotive+detailing" target="_blank" rel="noreferrer">Read all reviews on Google ↗</a>
+        <div className="section-heading"><div><p className="eyebrow"><span /> Verified on Google</p><h2>What customers say.</h2></div><div className="google-score"><b>G</b><span><strong>{reviewSummary.rating?.toFixed(1) ?? "Google"}</strong>{reviewSummary.rating && <i>★★★★★</i>}<small>{reviewSummary.count ? `${reviewSummary.count} reviews on Google` : "Camotive Detailing profile"}</small></span></div></div>
+        {reviews.length > 0 ? <div className="review-grid">{reviews.slice(0, 3).map((review, index) => <article key={`${review.author}-${index}`}><div className="quote">“</div><div className="review-stars">{"★".repeat(Math.round(review.rating))}</div><p>{review.text}</p><footer>{review.authorPhoto ? <img src={review.authorPhoto} alt="" referrerPolicy="no-referrer" /> : <span>{review.author.slice(0, 1)}</span>}<div><a href={review.authorUrl ?? review.reviewUrl ?? reviewSummary.profileUrl} target="_blank" rel="noreferrer"><b>{review.author}</b></a><small>{review.time}</small></div><a className="review-google" href={review.reviewUrl ?? reviewSummary.profileUrl} target="_blank" rel="noreferrer" aria-label="View this review on Google">G</a></footer></article>)}</div> : <div className="review-source-notice"><b>No placeholder reviews.</b><p>Customer reviews are displayed only when supplied directly by Google. Visit Camotive&apos;s Google profile to see the current reviews.</p><a className="button" href={reviewSummary.profileUrl} target="_blank" rel="noreferrer">View reviews on Google ↗</a></div>}
+        <a className="google-link" href={reviewSummary.profileUrl} target="_blank" rel="noreferrer">Read all reviews on Google ↗</a>
       </section>
 
       <section className="faq section" id="faq">
