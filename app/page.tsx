@@ -2,37 +2,48 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-type PackageId = "basic" | "full" | "premium";
-type AddOnId = "pet" | "debris" | "carpet" | "hydro" | "headlight" | "engine";
+type PackageId = "full" | "premium" | "maintenance" | "ceramic3" | "ceramic5";
+type AddOnId = "windshield" | "glass" | "headlight" | "engine";
+type VehicleSize = "small" | "medium" | "large";
 
 const packages = {
-  basic: {
-    name: "Basic Detail",
-    price: 150,
-    note: "Ideal for maintenance and lightly soiled vehicles.",
-    features: ["Interior surface clean", "Deep vacuum", "Hand wash + foam bath", "Wheels, tires + glass"],
-  },
   full: {
     name: "Full Detail",
-    price: 190,
-    note: "The complete interior and exterior reset.",
-    features: ["Everything in Basic", "Trim restoration", "Floor mat scrubbing", "Clay bar + hand wax"],
+    prices: { small: 250, medium: 300, large: 350 },
+    note: "A complete interior and exterior reset for normally maintained vehicles.",
+    features: ["Hand wash, wheels and tires", "Vacuum seats, carpets, mats and cargo", "Interior surfaces cleaned and protected", "No added paint sealant"],
   },
   premium: {
     name: "Premium Detail",
-    price: 260,
-    note: "Maximum restoration for heavily soiled vehicles.",
-    features: ["Everything in Full", "Steam-assisted clean", "Stain treatment", "Leather + interior protection"],
+    prices: { small: 350, medium: 425, large: 500 },
+    note: "A deeper clean with added paint protection for vehicles needing more care.",
+    features: ["Everything in Full Detail", "Fabric shampoo or extraction", "Leather or Alcantara treatment", "Decontamination + 3–6 month sealant"],
+  },
+  maintenance: {
+    name: "Maintenance Detail",
+    prices: { small: 125, medium: 150, large: 175 },
+    note: "Returning clients serviced every 2–4 weeks only.",
+    features: ["Hand wash and wheel care", "Tire dressing", "Interior vacuum and wipe-down", "Interior and exterior glass"],
+  },
+  ceramic3: {
+    name: "3-Year Ceramic Coating",
+    prices: { small: 900, medium: 1050, large: 1200 },
+    note: "Nasiol ZR53 for gloss, easier maintenance, and up to three years of protection.",
+    features: ["Prep wash + decontamination", "Panel preparation", "Nasiol ZR53 application", "Paint correction quoted separately"],
+  },
+  ceramic5: {
+    name: "5-Year Ceramic Coating",
+    prices: { small: 1300, medium: 1500, large: 1700 },
+    note: "Graphene ceramic protection with a light gloss polish for added clarity.",
+    features: ["Prep wash + decontamination", "Light gloss polish", "Panel preparation", "Paint correction quoted separately"],
   },
 } as const;
 
 const addOns = {
-  pet: ["Pet hair extraction", 25],
-  debris: ["Fine debris + sand", 20],
-  carpet: ["Hot water carpet shampoo", 40],
-  hydro: ["Hydro sealant", 30],
-  headlight: ["Headlight restoration", 50],
-  engine: ["Engine bay clean + dress", 40],
+  windshield: ["Windshield glass coating", 125],
+  glass: ["All exterior glass coating", 225],
+  headlight: ["Headlight restoration (pair)", 100],
+  engine: ["Engine bay cleaning", 75],
 } as const;
 
 type Review = { author: string; authorUrl?: string | null; authorPhoto?: string | null; rating: number; text: string; time: string; reviewUrl?: string | null };
@@ -49,6 +60,7 @@ function formatDate(value: string) {
 export default function Home() {
   const [activeTab, setActiveTab] = useState("services");
   const [selectedPackage, setSelectedPackage] = useState<PackageId>("full");
+  const [vehicleSize, setVehicleSize] = useState<VehicleSize>("small");
   const [selectedAddOns, setSelectedAddOns] = useState<AddOnId[]>([]);
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
@@ -73,8 +85,8 @@ export default function Home() {
   }, []);
 
   const total = useMemo(
-    () => packages[selectedPackage].price + selectedAddOns.reduce((sum, id) => sum + addOns[id][1], 0),
-    [selectedPackage, selectedAddOns],
+    () => packages[selectedPackage].prices[vehicleSize] + selectedAddOns.reduce((sum, id) => sum + addOns[id][1], 0),
+    [selectedPackage, selectedAddOns, vehicleSize],
   );
 
   const earliest = useMemo(() => {
@@ -100,7 +112,7 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     const payload = {
       packageId: selectedPackage,
-      packageName: packages[selectedPackage].name,
+      packageName: `${packages[selectedPackage].name} · ${vehicleSize[0].toUpperCase()}${vehicleSize.slice(1)}`,
       addOns: selectedAddOns.map((id) => addOns[id][0]).join(", "),
       date,
       time,
@@ -167,14 +179,13 @@ export default function Home() {
             <button className="coverage-button" onClick={() => scrollTo("coverage")}>View Mobile Coverage Area</button>
           </div>
           <div className="trust-row">
-            <div><strong>{reviewSummary.rating?.toFixed(1) ?? "5.0"}</strong><span className="stars">★★★★★</span><small>{reviewSummary.count ? `${reviewSummary.count} Google reviews` : "Google Business Profile"}</small></div>
+            <div><strong>{reviewSummary.rating?.toFixed(1) ?? "Google"}</strong>{reviewSummary.rating && <span className="stars">★★★★★</span>}<small>{reviewSummary.count ? `${reviewSummary.count} Google reviews` : "Live review connection"}</small></div>
             <div><strong>100%</strong><small>Mobile service</small></div>
             <div><strong>SA</strong><small>Locally owned</small></div>
           </div>
         </div>
-        <div className="hero-visual">
-          <img src="/og.png" alt="Freshly detailed black performance car" />
-          <div className="visual-shade" />
+        <div className="hero-visual brand-hero" aria-label="Camotive Detailing — Driven by Detail">
+          <div className="hero-brand-mark"><img src="/camotive-logo-original.png" alt="Camotive Detailing original logo" /><p>Driven by detail</p></div>
           <div className="detail-card"><span>✦</span><div><b>Professional paint care</b><small>Detailed at your home or workplace</small></div></div>
         </div>
       </section>
@@ -190,22 +201,22 @@ export default function Home() {
           <div><p className="eyebrow"><span /> Built for your vehicle</p><h2>Choose your level of detail.</h2></div>
           <p>Every service is fully mobile and completed with professional-grade products and equipment.</p>
         </div>
-        <div className="package-grid">
+        <div className="package-grid package-grid-menu">
           {(Object.keys(packages) as PackageId[]).map((id) => {
             const item = packages[id];
             return (
-              <article className={`package-card ${id === "full" ? "featured" : ""}`} key={id}>
-                {id === "full" && <div className="popular">Most popular</div>}
+              <article className={`package-card ${id === "premium" ? "featured" : ""}`} key={id}>
+                {id === "premium" && <div className="popular">Most popular</div>}
                 <p className="package-number">0{Object.keys(packages).indexOf(id) + 1}</p>
                 <h3>{item.name}</h3><p>{item.note}</p>
                 <ul>{item.features.map((feature) => <li key={feature}>✓ <span>{feature}</span></li>)}</ul>
-                <div className="price"><small>Starting at</small><strong>${item.price}</strong></div>
-                <button className={id === "full" ? "button" : "outline-button"} onClick={() => { setSelectedPackage(id); scrollTo("booking"); }}>Choose {item.name.replace(" Detail", "")}</button>
+                <div className="size-prices"><span>Small <b>${item.prices.small}+</b></span><span>Medium <b>${item.prices.medium}+</b></span><span>Large <b>${item.prices.large}+</b></span></div>
+                <button className={id === "premium" ? "button" : "outline-button"} onClick={() => { setSelectedPackage(id); scrollTo("booking"); }}>Choose {item.name.replace(" Detail", "")}</button>
               </article>
             );
           })}
         </div>
-        <p className="fine-print">Final pricing is based on vehicle size and condition and is confirmed on-site before service.</p>
+        <div className="menu-notes"><p><b>Vehicle sizes:</b> Small — coupe or sedan · Medium — crossover, small SUV, or small truck · Large — full-size truck, large SUV, or 3-row SUV.</p><p>Excessive pet hair or sand removal starts at +$50. Severe stains, smoke, urine, mildew, paint correction, and unusually neglected vehicles require a separate quote. Final pricing is confirmed before service.</p></div>
       </section>
 
       <section className="booking section" id="booking">
@@ -224,9 +235,13 @@ export default function Home() {
             <div className="choice-grid">
               {(Object.keys(packages) as PackageId[]).map((id) => (
                 <button className={selectedPackage === id ? "selected" : ""} onClick={() => setSelectedPackage(id)} key={id}>
-                  <span>{packages[id].name}</span><small>from ${packages[id].price}</small><i>{selectedPackage === id ? "✓" : ""}</i>
+                  <span>{packages[id].name}</span><small>from ${packages[id].prices.small}</small><i>{selectedPackage === id ? "✓" : ""}</i>
                 </button>
               ))}
+            </div>
+            <h4>Vehicle size</h4>
+            <div className="size-choice-grid">
+              {(["small", "medium", "large"] as VehicleSize[]).map((size) => <button key={size} className={vehicleSize === size ? "selected" : ""} onClick={() => setVehicleSize(size)}><b>{size}</b><small>{size === "small" ? "Coupe or sedan" : size === "medium" ? "Crossover, small SUV or truck" : "Full-size truck, large or 3-row SUV"}</small><span>${packages[selectedPackage].prices[size]}+</span></button>)}
             </div>
             <h4>Enhance your detail <small>Optional</small></h4>
             <div className="addon-grid">
@@ -255,7 +270,7 @@ export default function Home() {
               <label className="wide">Reminder preference<select name="reminder" defaultValue="text"><option value="text">Text me 24 hours before</option><option value="email">Email me 24 hours before</option><option value="both">Text and email me</option></select></label>
             </div>
             {bookingError && <p className="form-error" role="alert">{bookingError}</p>}
-            <div className="booking-footer"><div><small>{packages[selectedPackage].name} · {formatDate(date)} at {time}</small><strong>${total} estimated</strong></div><button className="button" type="submit">Confirm appointment →</button></div>
+            <div className="booking-footer"><div><small>{packages[selectedPackage].name} · {vehicleSize} · {formatDate(date)} at {time}</small><strong>${total}+ estimated</strong></div><button className="button" type="submit">Confirm appointment →</button></div>
           </form>}
           {step === 4 && booking && <div className="confirmation">
             <div className="checkmark">✓</div><p className="eyebrow">You&apos;re on the calendar</p><h3>Your detail is booked.</h3>

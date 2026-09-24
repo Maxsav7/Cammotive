@@ -8,9 +8,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Camotive Detailing",
     description: "Premium mobile detailing in San Antonio. Clean cars get attention.",
-    images: ["/og.png"],
   },
-  twitter: { card: "summary_large_image", images: ["/og.png"] },
+  twitter: { card: "summary" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
