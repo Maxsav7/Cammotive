@@ -48,6 +48,17 @@ const addOns = {
 
 type Review = { author: string; authorUrl?: string | null; authorPhoto?: string | null; rating: number; text: string; time: string; reviewUrl?: string | null };
 
+const googleProfileUrl = "https://www.google.com/search?q=camotive+detailing+san+antonio&ludocid=11765857279964552273";
+const verifiedGoogleReviewSnapshot: Review[] = [
+  { author: "Max", rating: 5, time: "Google review", text: "Absolutely outstanding service! My car looks better than the day I bought it. The attention to detail was incredible—from the spotless interior to the flawless shine on the exterior. The team was professional, punctual, and clearly takes pride in the work.", reviewUrl: googleProfileUrl },
+  { author: "Kayla Metten", rating: 5, time: "2 months ago", text: "I’m very pleased with the service I received from Camotive Detailing! Cam did an amazing job removing stubborn pollen stains that the regular car wash couldn’t get rid of. The interior was also thoroughly cleaned and looked almost brand new.", reviewUrl: googleProfileUrl },
+  { author: "Reggie Reed", rating: 5, time: "11 months ago", text: "Camotive did an exceptional job detailing my vehicle. When he finished, it honestly looked like I had just driven it off the lot brand new. The attention to detail was top notch—every corner inside and out was spotless and polished.", reviewUrl: googleProfileUrl },
+  { author: "Angela Holliday", rating: 5, time: "3 months ago", text: "Great experience! Very responsive, fit me in on short notice and my car is super clean. Very well done!", reviewUrl: googleProfileUrl },
+  { author: "bear hoyer", rating: 5, time: "11 months ago", text: "I can’t say enough good things about Camron! From start to finish, the experience was above and beyond my expectations. The level of care and meticulous attention to detail was outstanding on both of my cars.", reviewUrl: googleProfileUrl },
+  { author: "Allison Askew", rating: 5, time: "3 months ago", text: "He did a great job!", reviewUrl: googleProfileUrl },
+  { author: "Samuel Chandler", rating: 5, time: "2 days ago", text: "Very pleased. I recommend using this service!", reviewUrl: googleProfileUrl },
+];
+
 const times = ["8:00 AM", "10:30 AM", "1:30 PM", "4:00 PM"];
 
 function formatDate(value: string) {
@@ -68,8 +79,8 @@ export default function Home() {
   const [booking, setBooking] = useState<Record<string, string> | null>(null);
   const [lookupCode, setLookupCode] = useState("");
   const [lookupResult, setLookupResult] = useState<Record<string, string> | null>(null);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [reviewSummary, setReviewSummary] = useState<{ rating: number | null; count: number | null; profileUrl: string }>({ rating: null, count: null, profileUrl: "https://www.google.com/search?q=camotive+detailing+san+antonio&ludocid=11765857279964552273" });
+  const [reviews, setReviews] = useState<Review[]>(verifiedGoogleReviewSnapshot);
+  const [reviewSummary, setReviewSummary] = useState<{ rating: number | null; count: number | null; profileUrl: string }>({ rating: 5, count: 7, profileUrl: googleProfileUrl });
   const [bookingError, setBookingError] = useState("");
 
   useEffect(() => {
@@ -308,7 +319,7 @@ export default function Home() {
 
       <section className="reviews section" id="reviews">
         <div className="section-heading"><div><p className="eyebrow"><span /> Verified on Google</p><h2>What customers say.</h2></div><div className="google-score"><b>G</b><span><strong>{reviewSummary.rating?.toFixed(1) ?? "Google"}</strong>{reviewSummary.rating && <i>★★★★★</i>}<small>{reviewSummary.count ? `${reviewSummary.count} reviews on Google` : "Camotive Detailing profile"}</small></span></div></div>
-        {reviews.length > 0 ? <div className="review-grid">{reviews.slice(0, 3).map((review, index) => <article key={`${review.author}-${index}`}><div className="quote">“</div><div className="review-stars">{"★".repeat(Math.round(review.rating))}</div><p>{review.text}</p><footer>{review.authorPhoto ? <img src={review.authorPhoto} alt="" referrerPolicy="no-referrer" /> : <span>{review.author.slice(0, 1)}</span>}<div><a href={review.authorUrl ?? review.reviewUrl ?? reviewSummary.profileUrl} target="_blank" rel="noreferrer"><b>{review.author}</b></a><small>{review.time}</small></div><a className="review-google" href={review.reviewUrl ?? reviewSummary.profileUrl} target="_blank" rel="noreferrer" aria-label="View this review on Google">G</a></footer></article>)}</div> : <div className="review-source-notice"><b>No placeholder reviews.</b><p>Customer reviews are displayed only when supplied directly by Google. Visit Camotive&apos;s Google profile to see the current reviews.</p><a className="button" href={reviewSummary.profileUrl} target="_blank" rel="noreferrer">View reviews on Google ↗</a></div>}
+        {reviews.length > 0 ? <div className="review-grid">{reviews.map((review, index) => <article key={`${review.author}-${index}`}><div className="quote">“</div><div className="review-stars">{"★".repeat(Math.round(review.rating))}</div><p>{review.text}</p><footer>{review.authorPhoto ? <img src={review.authorPhoto} alt="" referrerPolicy="no-referrer" /> : <span>{review.author.slice(0, 1)}</span>}<div><a href={review.authorUrl ?? review.reviewUrl ?? reviewSummary.profileUrl} target="_blank" rel="noreferrer"><b>{review.author}</b></a><small>{review.time}</small></div><a className="review-google" href={review.reviewUrl ?? reviewSummary.profileUrl} target="_blank" rel="noreferrer" aria-label="View this review on Google">G</a></footer></article>)}</div> : <div className="review-source-notice"><b>No placeholder reviews.</b><p>Customer reviews are displayed only when supplied directly by Google. Visit Camotive&apos;s Google profile to see the current reviews.</p><a className="button" href={reviewSummary.profileUrl} target="_blank" rel="noreferrer">View reviews on Google ↗</a></div>}
         <a className="google-link" href={reviewSummary.profileUrl} target="_blank" rel="noreferrer">Read all reviews on Google ↗</a>
       </section>
 
