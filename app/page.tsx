@@ -139,32 +139,33 @@ export default function Home() {
 
   return (
     <main>
+      <div className="announcement">Mobile detailing, ceramic coatings & paint protection — we come to you across San Antonio</div>
       <header className="site-header">
         <button className="brand" onClick={() => scrollTo("home")} aria-label="Camotive home">
           <img src="/camotive-logo-original.png" alt="Camotive Detailing" />
         </button>
         <nav aria-label="Main navigation">
-          {["services", "coverage", "reviews", "faq"].map((tab) => (
+          {["services", "booking", "coverage", "reviews", "faq"].map((tab) => (
             <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => scrollTo(tab)}>
               {tab === "booking" ? "Book" : tab}
             </button>
           ))}
         </nav>
         <div className="header-actions">
-          <button className="text-button" onClick={() => scrollTo("appointment")}>My appointment</button>
-          <button className="button button-small" onClick={() => scrollTo("booking")}>Book now</button>
+          <a className="header-phone" href="tel:+12105730671">(210) 573-0671</a>
+          <button className="button button-small" onClick={() => scrollTo("booking")}>Schedule online</button>
         </div>
       </header>
 
       <section className="hero" id="home">
         <div className="hero-glow" />
         <div className="hero-copy">
-          <p className="eyebrow"><span /> We come to you · San Antonio</p>
-          <h1>Protect your paint.<br /><em>Save your time.</em></h1>
-          <p className="hero-lede">Professional mobile detailing at your home or workplace. We restore gloss, protect your finish, and save you the drive across town.</p>
+          <p className="eyebrow"><span /> San Antonio, Texas · Mobile service</p>
+          <h1>Mobile detailing<br />and ceramic coating.</h1>
+          <p className="hero-lede">Premium vehicle care at your home or workplace. From complete details to long-term ceramic protection, Camotive brings a careful, professional process directly to you.</p>
           <div className="hero-actions">
-            <button className="button hero-primary" onClick={() => scrollTo("booking")}>Schedule My Detail <span>→</span></button>
-            <button className="coverage-button" onClick={() => scrollTo("coverage")}>View Mobile Coverage Area</button>
+            <button className="button hero-primary" onClick={() => scrollTo("booking")}>Schedule online <span>→</span></button>
+            <button className="coverage-button" onClick={() => scrollTo("services")}>Explore services</button>
           </div>
           <div className="trust-row">
             <div><strong>{reviewSummary.rating?.toFixed(1) ?? "Google"}</strong>{reviewSummary.rating && <span className="stars">★★★★★</span>}<small>{reviewSummary.count ? `${reviewSummary.count} Google reviews` : "Live review connection"}</small></div>
@@ -173,7 +174,7 @@ export default function Home() {
           </div>
         </div>
         <div className="hero-visual brand-hero" aria-label="Camotive Detailing — Driven by Detail">
-          <div className="hero-brand-mark"><img src="/camotive-logo-original.png" alt="Camotive Detailing original logo" /><p>Driven by detail</p></div>
+          <div className="hero-brand-mark"><img src="/camotive-logo-original.png" alt="Camotive Detailing original logo" /><p>Original Camotive work arriving soon</p></div>
           <div className="detail-card"><span>✦</span><div><b>Professional paint care</b><small>Detailed at your home or workplace</small></div></div>
         </div>
       </section>
@@ -186,8 +187,8 @@ export default function Home() {
 
       <section className="services section" id="services">
         <div className="section-heading">
-          <div><p className="eyebrow"><span /> Built for your vehicle</p><h2>Choose your level of detail.</h2></div>
-          <p>Every service is fully mobile and completed with professional-grade products and equipment.</p>
+          <div><p className="eyebrow"><span /> Services & protection</p><h2>Two ways to a better finish.</h2></div>
+          <p>Choose a complete mobile detail or long-term ceramic protection. Every service is performed with professional products, careful preparation, and straightforward pricing.</p>
         </div>
         <div className="package-grid package-grid-menu">
           {(Object.keys(packages) as PackageId[]).map((id) => {
