@@ -139,79 +139,73 @@ export default function Home() {
 
   return (
     <main>
-      <div className="announcement">Mobile detailing, ceramic coatings & paint protection — we come to you across San Antonio</div>
+      <div className="announcement">San Antonio mobile detailing · Appointments available</div>
       <header className="site-header">
         <button className="brand" onClick={() => scrollTo("home")} aria-label="Camotive home">
           <img src="/camotive-logo-original.png" alt="Camotive Detailing" />
         </button>
         <nav aria-label="Main navigation">
-          {["services", "booking", "coverage", "reviews", "faq"].map((tab) => (
+          {["services", "coverage", "reviews", "faq"].map((tab) => (
             <button key={tab} className={activeTab === tab ? "active" : ""} onClick={() => scrollTo(tab)}>
               {tab === "booking" ? "Book" : tab}
             </button>
           ))}
         </nav>
         <div className="header-actions">
-          <a className="header-phone" href="tel:+12105730671">(210) 573-0671</a>
-          <button className="button button-small" onClick={() => scrollTo("booking")}>Schedule online</button>
+          <a className="header-phone" href="tel:+12105730671">Call (210) 573-0671</a>
+          <button className="button button-small" onClick={() => scrollTo("booking")}>Book a detail</button>
         </div>
       </header>
 
       <section className="hero" id="home">
-        <div className="hero-glow" />
         <div className="hero-copy">
-          <p className="eyebrow"><span /> San Antonio, Texas · Mobile service</p>
-          <h1>Mobile detailing<br />and ceramic coating.</h1>
-          <p className="hero-lede">Premium vehicle care at your home or workplace. From complete details to long-term ceramic protection, Camotive brings a careful, professional process directly to you.</p>
+          <p className="eyebrow">Mobile detailing · San Antonio, TX</p>
+          <h1>Your car.<br />Properly cared for.</h1>
+          <p className="hero-lede">Professional interior and exterior detailing, paint enhancement, and ceramic protection—performed at your home or workplace.</p>
           <div className="hero-actions">
-            <button className="button hero-primary" onClick={() => scrollTo("booking")}>Schedule online <span>→</span></button>
-            <button className="coverage-button" onClick={() => scrollTo("services")}>Explore services</button>
+            <button className="button hero-primary" onClick={() => scrollTo("booking")}>Schedule my detail</button>
+            <button className="text-link" onClick={() => scrollTo("services")}>View services <span>↘</span></button>
           </div>
           <div className="trust-row">
-            <div><strong>{reviewSummary.rating?.toFixed(1) ?? "Google"}</strong>{reviewSummary.rating && <span className="stars">★★★★★</span>}<small>{reviewSummary.count ? `${reviewSummary.count} Google reviews` : "Live review connection"}</small></div>
-            <div><strong>100%</strong><small>Mobile service</small></div>
-            <div><strong>SA</strong><small>Locally owned</small></div>
+            <div><span className="stars">★★★★★</span><strong>{reviewSummary.rating?.toFixed(1)} on Google</strong></div>
+            <div><strong>Fully mobile</strong><small>We come to you</small></div>
           </div>
         </div>
-        <div className="hero-visual brand-hero" aria-label="Camotive Detailing — Driven by Detail">
-          <div className="hero-brand-mark"><img src="/camotive-logo-original.png" alt="Camotive Detailing original logo" /><p>Original Camotive work arriving soon</p></div>
-          <div className="detail-card"><span>✦</span><div><b>Professional paint care</b><small>Detailed at your home or workplace</small></div></div>
+        <div className="hero-visual" aria-label="Camotive Detailing">
+          <div className="hero-logo"><img src="/camotive-logo-original.png" alt="Camotive Detailing" /></div>
+          <div className="hero-service-index"><span>01 / 03</span><strong>Detailing</strong><small>Interior · Exterior · Protection</small></div>
         </div>
       </section>
 
       <section className="confidence-strip" aria-label="Why choose Camotive">
-        <div><span>01</span><p><strong>We come to you</strong><small>Home or workplace appointments</small></p></div>
-        <div><span>02</span><p><strong>Upfront estimates</strong><small>Clear packages and add-ons</small></p></div>
-        <div><span>03</span><p><strong>Paint-safe process</strong><small>Professional products and care</small></p></div>
+        <p>Mobile convenience</p><p>Professional products</p><p>Clear pricing</p><p>Detail-focused service</p>
       </section>
 
       <section className="services section" id="services">
         <div className="section-heading">
-          <div><p className="eyebrow"><span /> Services & protection</p><h2>Two ways to a better finish.</h2></div>
-          <p>Choose a complete mobile detail or long-term ceramic protection. Every service is performed with professional products, careful preparation, and straightforward pricing.</p>
+          <div><p className="eyebrow">Services</p><h2>Care for every finish.</h2></div>
+          <p>Straightforward packages for routine care, a full reset, or long-term protection.</p>
         </div>
-        <div className="package-grid package-grid-menu">
+        <div className="service-list">
           {(Object.keys(packages) as PackageId[]).map((id) => {
             const item = packages[id];
             return (
-              <article className={`package-card ${id === "premium" ? "featured" : ""}`} key={id}>
-                {id === "premium" && <div className="popular">Most popular</div>}
-                <p className="package-number">0{Object.keys(packages).indexOf(id) + 1}</p>
-                <h3>{item.name}</h3><p>{item.note}</p>
-                <ul>{item.features.map((feature) => <li key={feature}>✓ <span>{feature}</span></li>)}</ul>
-                <div className="size-prices"><span>Small <b>${item.prices.small}+</b></span><span>Medium <b>${item.prices.medium}+</b></span><span>Large <b>${item.prices.large}+</b></span></div>
-                <button className={id === "premium" ? "button" : "outline-button"} onClick={() => { setSelectedPackage(id); scrollTo("booking"); }}>Choose {item.name.replace(" Detail", "")}</button>
+              <article className="service-row" key={id}>
+                <span className="service-number">0{Object.keys(packages).indexOf(id) + 1}</span>
+                <div className="service-copy"><h3>{item.name}</h3><p>{item.note}</p><p className="service-includes">{item.features.join(" · ")}</p></div>
+                <div className="service-price"><small>Starting at</small><strong>${item.prices.small}</strong></div>
+                <button className="service-select" onClick={() => { setSelectedPackage(id); scrollTo("booking"); }} aria-label={`Book ${item.name}`}>→</button>
               </article>
             );
           })}
         </div>
-        <div className="menu-notes"><p><b>Vehicle sizes:</b> Small — coupe or sedan · Medium — crossover, small SUV, or small truck · Large — full-size truck, large SUV, or 3-row SUV.</p><p>Excessive pet hair or sand removal starts at +$50. Severe stains, smoke, urine, mildew, paint correction, and unusually neglected vehicles require a separate quote. Final pricing is confirmed before service.</p></div>
+        <p className="menu-notes">Pricing varies by vehicle size and condition. Final pricing is confirmed before service. Excessive pet hair, sand, severe stains, smoke, mildew, paint correction, and unusually neglected vehicles may require a custom quote.</p>
       </section>
 
       <section className="booking section" id="booking">
         <div className="section-heading booking-heading">
-          <div><p className="eyebrow"><span /> Easy online scheduling</p><h2>Book the shine.</h2></div>
-          <p>Pick your service, choose a time, and we&apos;ll come to you. You&apos;ll receive your confirmation and reminder details right away.</p>
+          <div><p className="eyebrow">Online booking</p><h2>Choose a time.<br />We&apos;ll come to you.</h2></div>
+          <p>Three simple steps. Select your service, pick an available appointment, and tell us where the vehicle is located.</p>
         </div>
         <div className="booking-shell">
           <div className="booking-progress">
@@ -274,30 +268,21 @@ export default function Home() {
 
       <section className="coverage section" id="coverage">
         <div className="coverage-copy">
-          <p className="eyebrow"><span /> San Antonio mobile service</p>
-          <h2>Professional detailing,<br />wherever you park.</h2>
+          <p className="eyebrow">Mobile service area</p>
+          <h2>We bring the detail shop to you.</h2>
           <p>Camotive brings professional-grade products, equipment, and paint protection directly to homes and workplaces throughout the San Antonio area.</p>
-          <div className="location-facts">
-            <div><small>Service base</small><strong>San Antonio, Texas</strong><span>Mobile service · No public storefront</span></div>
-            <div><small>Availability</small><strong>Appointments from 8 AM</strong><span>Residential and workplace service</span></div>
-          </div>
           <button className="button" onClick={() => scrollTo("booking")}>Check availability →</button>
-        </div>
-        <div className="coverage-map" aria-label="Stylized map of Camotive's San Antonio service area">
-          <div className="map-road road-one" /><div className="map-road road-two" /><div className="map-road road-three" />
-          {[["Stone Oak", "north"], ["The Dominion", "northwest"], ["Leon Springs", "west"], ["Alamo Heights", "central"], ["Downtown", "downtown"]].map(([name, position]) => <div className={`map-pin ${position}`} key={name}><i /><span>{name}</span></div>)}
-          <div className="coverage-radius"><b>CAMOTIVE</b><small>Mobile coverage</small></div>
         </div>
         <div className="neighborhood-list">
           <p>Popular service areas</p>
-          {["Stone Oak", "Alamo Heights", "The Dominion", "Leon Springs", "Downtown San Antonio"].map((area, index) => <div key={area}><span>0{index + 1}</span><strong>{area}</strong><i>Mobile service</i></div>)}
+          {["Stone Oak", "Alamo Heights", "The Dominion", "Leon Springs", "Downtown San Antonio"].map((area) => <div key={area}><strong>{area}</strong><span>San Antonio, TX</span></div>)}
           <p className="coverage-note">Outside these areas? Contact us—we may still be able to come to you.</p>
         </div>
       </section>
 
       <section className="reviews section" id="reviews">
         <Script src="https://elfsightcdn.com/platform.js" strategy="lazyOnload" />
-        <div className="section-heading"><div><p className="eyebrow"><span /> Verified on Google</p><h2>What customers say.</h2></div><div className="google-score"><b>G</b><span><strong>{reviewSummary.rating?.toFixed(1) ?? "Google"}</strong>{reviewSummary.rating && <i>★★★★★</i>}<small>{reviewSummary.count ? `${reviewSummary.count} reviews on Google` : "Camotive Detailing profile"}</small></span></div></div>
+        <div className="section-heading"><div><p className="eyebrow">Google reviews</p><h2>Trusted with the details.</h2></div><div className="google-score"><b>G</b><span><strong>{reviewSummary.rating?.toFixed(1)} / 5.0</strong><i>★★★★★</i><small>{reviewSummary.count} verified reviews</small></span></div></div>
         <div className="elfsight-review-shell">
           <div className="elfsight-app-1a419f21-0cfe-481d-972c-8b2baeacf0dc" data-elfsight-app-lazy />
         </div>
@@ -305,7 +290,7 @@ export default function Home() {
       </section>
 
       <section className="faq section" id="faq">
-        <div className="faq-heading"><p className="eyebrow"><span /> Before we arrive</p><h2>Common questions.</h2><p>Everything you need to know before your mobile detail.</p></div>
+        <div className="faq-heading"><p className="eyebrow">Before we arrive</p><h2>Good to know.</h2><p>Everything you need before your mobile detail.</p></div>
         <div className="faq-list">
           <details><summary>How long does a full detail take?<span>+</span></summary><p>Most full details take approximately 3–5 hours. Timing depends on vehicle size, condition, selected add-ons, and the level of restoration needed. We&apos;ll confirm the expected timeframe before beginning.</p></details>
           <details><summary>Do you need access to water or electricity?<span>+</span></summary><p>Please have a standard outdoor water connection and electrical outlet available within reasonable reach of the vehicle. If that is not possible, contact us before booking so we can confirm what your location requires.</p></details>
@@ -314,15 +299,14 @@ export default function Home() {
       </section>
 
       <section className="appointment section" id="appointment">
-        <div><p className="eyebrow"><span /> Already booked?</p><h2>Find your appointment.</h2><p>Enter the confirmation code from your booking to see the service, date, time, and reminder preference.</p></div>
+        <div><p className="eyebrow">Already booked?</p><h2>Find your appointment.</h2><p>Enter the confirmation code from your booking to see the service, date, time, and reminder preference.</p></div>
         <form onSubmit={lookupAppointment}><label>Confirmation code<input value={lookupCode} onChange={(event) => setLookupCode(event.target.value.toUpperCase())} placeholder="CAM-123456" /></label><button className="button">View appointment →</button></form>
         {lookupResult && <div className="lookup-card"><span>✓</span><div><small>{lookupResult.package_name}</small><strong>{formatDate(lookupResult.date)} · {lookupResult.time}</strong><p>{lookupResult.vehicle} · {lookupResult.address}</p></div></div>}
       </section>
 
       <section className="about section" id="about">
-        <div className="about-mark"><img src="/camotive-logo-original.png" alt="Camotive Detailing original logo" /></div>
-        <div><p className="eyebrow"><span /> From Camotive Detailing</p><h2>Precision lives<br />in the details.</h2></div>
-        <div><p>Camotive Detailing is a premium mobile detailing service based in San Antonio, Texas. We specialize in interior and exterior detailing, paint enhancement polishing, ceramic coatings, and maintenance details.</p><div className="socials"><a href="https://www.instagram.com/camotivedetailing/" target="_blank" rel="noreferrer">Instagram ↗</a><a href="https://www.tiktok.com/@camotivedetailing" target="_blank" rel="noreferrer">TikTok ↗</a><a href="tel:+12105730671">(210) 573-0671</a></div></div>
+        <div><p className="eyebrow">Camotive Detailing</p><h2>Driven by detail.</h2></div>
+        <div><p>Premium mobile detailing based in San Antonio, specializing in interior and exterior detailing, paint enhancement polishing, ceramic coatings, and maintenance care.</p><div className="socials"><a href="https://www.instagram.com/camotivedetailing/" target="_blank" rel="noreferrer">Instagram ↗</a><a href="https://www.tiktok.com/@camotivedetailing" target="_blank" rel="noreferrer">TikTok ↗</a><a href="tel:+12105730671">(210) 573-0671</a></div></div>
       </section>
 
       <footer className="footer"><div className="brand"><img src="/camotive-logo-original.png" alt="Camotive Detailing" /></div><p>Premium mobile detailing in San Antonio, Texas.</p><button onClick={() => scrollTo("home")}>Back to top ↑</button></footer>
