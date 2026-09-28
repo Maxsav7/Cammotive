@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type PackageId = "full" | "premium" | "maintenance" | "ceramic3" | "ceramic5";
 type AddOnId = "windshield" | "glass" | "headlight" | "engine";
@@ -59,6 +59,7 @@ function formatDate(value: string) {
 }
 
 export default function Home() {
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [activeTab, setActiveTab] = useState("services");
   const [selectedPackage, setSelectedPackage] = useState<PackageId>("full");
   const [vehicleSize, setVehicleSize] = useState<VehicleSize>("small");
@@ -71,6 +72,17 @@ export default function Home() {
   const [lookupResult, setLookupResult] = useState<Record<string, string> | null>(null);
   const reviewSummary = { rating: 5, count: 7, profileUrl: googleProfileUrl };
   const [bookingError, setBookingError] = useState("");
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("camotive-theme");
+    if (saved === "light" || saved === "dark") setTheme(saved);
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    window.localStorage.setItem("camotive-theme", next);
+  }
 
   const total = useMemo(
     () => packages[selectedPackage].prices[vehicleSize] + selectedAddOns.reduce((sum, id) => sum + addOns[id][1], 0),
@@ -138,7 +150,7 @@ export default function Home() {
   }
 
   return (
-    <main>
+    <main className="site-shell" data-theme={theme}>
       <div className="announcement">San Antonio mobile detailing · Appointments available</div>
       <header className="site-header">
         <button className="brand" onClick={() => scrollTo("home")} aria-label="Camotive home">
@@ -152,6 +164,9 @@ export default function Home() {
           ))}
         </nav>
         <div className="header-actions">
+          <button className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+            <span aria-hidden="true">{theme === "dark" ? "☼" : "◐"}</span>
+          </button>
           <a className="header-phone" href="tel:+12105730671">Call (210) 573-0671</a>
           <button className="button button-small" onClick={() => scrollTo("booking")}>Book a detail</button>
         </div>
