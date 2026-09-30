@@ -1,91 +1,81 @@
 import assert from "node:assert/strict";
-import { access, readFile, readdir } from "node:fs/promises";
-import test from "node:test";
+import { spawn } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
+import { before, after, test } from "node:test";
 
-const developmentPreviewMeta =
-  /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
-const templateRoot = new URL("../", import.meta.url);
-const previewRoot = new URL("../app/_sites-preview/", import.meta.url);
+const origin = "http://127.0.0.1:4179";
+let server;
+let logs = "";
 
-async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
+before(async () => {
+  // Cloudflare modules require workerd rather than Node's ESM loader.
+  server = spawn(process.execPath, [
+    "node_modules/wrangler/bin/wrangler.js", "dev",
+    "--config", "dist/server/wrangler.json", "--local",
+    "--ip", "127.0.0.1", "--port", "4179", "--inspector-port", "0",
+  ], { env: { ...process.env, CI: "true", WRANGLER_SEND_METRICS: "false" }, stdio: ["ignore", "pipe", "pipe"] });
+  server.stdout.on("data", chunk => { logs += chunk; });
+  server.stderr.on("data", chunk => { logs += chunk; });
+  server.on("error", error => { logs += error.message; });
+  for (let attempt = 0; attempt < 120; attempt++) {
+    if (server.exitCode !== null) throw new Error(`Preview exited: ${logs}`);
+    try {
+      if ((await fetch(origin, { signal: AbortSignal.timeout(1000) })).ok) return;
+    } catch { /* Wait for runtime startup. */ }
+    await delay(250);
+  }
+  throw new Error(`Preview did not become ready: ${logs}`);
+}, { timeout: 180000 });
 
-  return worker.fetch(
-    new Request("http://localhost/", {
-      headers: { accept: "text/html" },
-    }),
-    {
-      ASSETS: {
-        fetch: async () => new Response("Not found", { status: 404 }),
-      },
-    },
-    {
-      waitUntil() {},
-      passThroughOnException() {},
-    },
-  );
-}
-
-test("server-renders the starter loading skeleton", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-
-  const html = await response.text();
-  assert.match(html, developmentPreviewMeta);
-  assert.match(html, /<title>Your site is taking shape<\/title>/i);
-  assert.match(html, /Building your site/);
-  assert.match(html, /Your site is taking shape/);
-  assert.match(
-    html,
-    /Your first version will appear here automatically when it’s ready\./,
-  );
-  assert.doesNotMatch(html, /Codex/);
-  assert.match(html, /react-loading-skeleton/);
-  assert.match(html, /role="status"/);
+after(async () => {
+  if (!server || server.exitCode !== null) return;
+  const exited = new Promise(resolve => server.once("exit", resolve));
+  server.kill("SIGTERM");
+  const fallback = setTimeout(() => server.kill("SIGKILL"), 5000);
+  await exited;
+  clearTimeout(fallback);
 });
 
-test("keeps the loading skeleton scoped and disposable", async () => {
-  const [preview, css, page, layout, packageJson, files] = await Promise.all([
-    readFile(new URL("SkeletonPreview.tsx", previewRoot), "utf8"),
-    readFile(new URL("preview.css", previewRoot), "utf8"),
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../package.json", import.meta.url), "utf8"),
-    readdir(previewRoot),
-  ]);
+async function html(path) {
+  const response = await fetch(`${origin}${path}`);
+  assert.equal(response.status, 200, path);
+  assert.match(response.headers.get("content-type") ?? "", /text\/html/);
+  return response.text();
+}
 
-  assert.deepEqual(files.sort(), ["SkeletonPreview.tsx", "preview.css"]);
-  assert.match(preview, /from "react-loading-skeleton"/);
-  assert.match(preview, /baseColor="#eceae7"/);
-  assert.match(preview, /highlightColor="#f9f8f6"/);
-  assert.match(preview, /duration=\{2\.8\}/);
-  assert.match(preview, /sites-skeleton-search-placeholder/);
-  assert.match(packageJson, /"react-loading-skeleton": "3\.5\.0"/);
+test("homepage renders Camotive branding, McLaren hero, and booking navigation", async () => {
+  const page = await html("/");
+  assert.match(page, /Camotive Detailing/);
+  assert.match(page, /work\/mclaren-hero\.jpg/);
+  assert.match(page, /href="\/book"/);
+  assert.match(page, /href="\/our-work"/);
+  assert.doesNotMatch(page, /Your site is taking shape|Building your site/);
+});
 
-  const shellIndex = preview.indexOf('className="sites-skeleton-shell"');
-  const statusIndex = preview.indexOf('className="sites-skeleton-status"');
-  assert.ok(shellIndex >= 0 && statusIndex > shellIndex);
-  assert.match(css, /position:\s*fixed/);
-  assert.match(css, /inset:\s*0/);
-  assert.match(css, /opacity:\s*0\.52/);
-  assert.match(css, /prefers-reduced-motion:\s*reduce/);
-  assert.doesNotMatch(css, /#020617|canvas|pets|progress/i);
-  assert.doesNotMatch(
-    preview,
-    /loading-spinner|status-mark|status-progress|canvas|cookie|random/i,
-  );
+test("all supported customer pages render", async () => {
+  for (const route of ["mobile-detailing", "ceramic-coating", "paint-correction", "locations", "stone-oak", "alamo-heights", "the-dominion", "leon-springs", "downtown", "our-work", "reviews", "contact", "book", "appointment"]) {
+    assert.match(await html(`/${route}`), /Camotive/);
+  }
+});
 
-  assert.match(page, /export const metadata:\s*Metadata/);
-  assert.match(page, /"codex-preview": "development"/);
-  assert.match(page, /<SkeletonPreview \/>/);
-  assert.match(layout, /title:\s*"Starter Project"/);
-  assert.doesNotMatch(layout, /codex-preview|_sites-preview|themeColor|\bViewport\b/);
-  assert.doesNotMatch(css, /(^|\s)(html|body)\s*\{/m);
+test("gallery exposes 17 photos and two opt-in video players", async () => {
+  const page = await html("/our-work");
+  assert.equal((page.match(/aria-label="View full photo:/g) ?? []).length, 17);
+  assert.equal((page.match(/<video\b/g) ?? []).length, 2);
+  assert.doesNotMatch(page, /<video[^>]*autoplay/i);
+  for (const path of ["mclaren-hero.jpg", "mclaren-interior.jpg", "detail-2282.mp4", "detail-2278.mp4"]) {
+    const response = await fetch(`${origin}/work/${path}`, { method: "HEAD" });
+    assert.equal(response.status, 200, path);
+    assert.match(response.headers.get("content-type") ?? "", /image\/jpeg|video\/mp4/);
+  }
+});
 
-  await assert.rejects(
-    access(new URL("public/_sites-preview", templateRoot)),
-  );
+test("Google links open the profile without a forced review form", async () => {
+  const page = await html("/reviews");
+  assert.match(page, /ludocid=11765857279964552273/);
+  assert.doesNotMatch(page, /writereview|review\/create|elfsightcdn/);
+});
+
+test("unknown pages return 404", async () => {
+  assert.equal((await fetch(`${origin}/not-a-camotive-page`)).status, 404);
 });
