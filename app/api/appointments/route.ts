@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { env, databaseReady } from "@/lib/booking-db";
 import { sendBookingNotifications } from "./notifications";
 
 type AppointmentInput = {
@@ -28,6 +28,7 @@ async function ensureTable() {
 }
 
 export async function POST(request: Request) {
+  if (!databaseReady()) return Response.json({ error: "Online booking is temporarily unavailable. Please call (210) 573-0671." }, { status: 503 });
   const data = await request.json() as AppointmentInput;
   if (!data.name || !data.email || !data.phone || !data.date || !data.time) {
     return Response.json({ error: "Missing required booking details" }, { status: 400 });
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const code = new URL(request.url).searchParams.get("code")?.trim().toUpperCase();
   if (!code) return Response.json({ error: "Confirmation code required" }, { status: 400 });
+  if (!databaseReady()) return Response.json({ error: "Appointment lookup is temporarily unavailable. Please call (210) 573-0671." }, { status: 503 });
   await ensureTable();
   const appointment = await env.DB.prepare(`SELECT confirmation_code, package_name, add_ons, date, time, total, name, vehicle, address, reminder
     FROM appointments WHERE confirmation_code = ?`).bind(code).first();

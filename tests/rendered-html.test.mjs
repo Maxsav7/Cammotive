@@ -4,16 +4,17 @@ import { setTimeout as delay } from "node:timers/promises";
 import { before, after, test } from "node:test";
 
 const origin = "http://127.0.0.1:4179";
+const useNext = process.env.TEST_RUNTIME === "next";
 let server;
 let logs = "";
 
 before(async () => {
   // Cloudflare modules require workerd rather than Node's ESM loader.
-  server = spawn(process.execPath, [
+  server = spawn(process.execPath, useNext ? ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "4179"] : [
     "node_modules/wrangler/bin/wrangler.js", "dev",
     "--config", "dist/server/wrangler.json", "--local",
     "--ip", "127.0.0.1", "--port", "4179", "--inspector-port", "0",
-  ], { env: { ...process.env, CI: "true", WRANGLER_SEND_METRICS: "false" }, stdio: ["ignore", "pipe", "pipe"] });
+  ], { env: { ...process.env, CLOUDFLARE_D1_API_TOKEN: "", CI: "true", WRANGLER_SEND_METRICS: "false" }, stdio: ["ignore", "pipe", "pipe"] });
   server.stdout.on("data", chunk => { logs += chunk; });
   server.stderr.on("data", chunk => { logs += chunk; });
   server.on("error", error => { logs += error.message; });
@@ -78,4 +79,14 @@ test("Google links open the profile without a forced review form", async () => {
 
 test("unknown pages return 404", async () => {
   assert.equal((await fetch(`${origin}/not-a-camotive-page`)).status, 404);
+});
+
+test("unconfigured Vercel booking fails clearly without creating an appointment", { skip: !useNext }, async () => {
+  for (const options of [{ method: "GET" }, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }]) {
+    const response = await fetch(`${origin}/api/appointments?code=CAM-TEST`, options);
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.match(body.error, /temporarily unavailable/);
+    assert.equal(body.confirmationCode, undefined);
+  }
 });
