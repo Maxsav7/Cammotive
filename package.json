@@ -17,7 +17,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit -p tsconfig.next.json",
-    "db:check": "drizzle-kit generate && git diff --exit-code -- drizzle && test -z \"$(git status --porcelain -- drizzle)\""
+    "db:check": "drizzle-kit generate && git diff --exit-code -- drizzle && test -z \"$(git status --porcelain -- drizzle)\"",
+    "test:browser": "npm run build:vercel && playwright test"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",
@@ -27,7 +28,9 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@cloudflare/vite-plugin": "1.62.5",
+    "@playwright/test": "1.64.0",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
