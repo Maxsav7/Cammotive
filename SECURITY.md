@@ -128,12 +128,21 @@ are used. Remote D1 transport and platform firewall settings still need staging
 verification. Keep owner MFA, branch protection, secret scanning/push protection,
 provider caps and backup restore checks enabled in their dashboards.
 
-## Outstanding dependency gate
+## Dependency gate
 
-The October 2026 audit still reports eight high-severity dependency entries
-stemming from the unpatched `braces` advisory GHSA-vfj7-8cjw-p6xm in build/lint
-tooling. These are not eight independently confirmed application vulnerabilities.
-The production-only npm audit reports zero known vulnerabilities, but that does
-not establish that every bundled Cloudflare dependency is safe. The full CI audit
-remains blocking; no advisory has been suppressed. Recheck upstream fixes before
-release: https://github.com/advisories/GHSA-vfj7-8cjw-p6xm.
+`npm run security:audit` (scripts/audit.mjs) runs in CI. Any high or critical
+advisory in production dependencies fails the build. In the full tree, including
+build and test tools, an advisory fails unless it is listed in the script with a
+reason and a review-by date; an expired entry fails too.
+
+October 2026: `sharp` (GHSA-wq5f-xc86-pv6w) and `source-map-js`
+(GHSA-68fv-2mgg-jv7q) are resolved with `overrides` in package.json pinning the
+patched 0.35.5 and 1.2.2. Next.js itself already shipped sharp 0.35.5; the old
+copy was only inside Miniflare and vinext. Remove each override once the
+packages that depend on it ship the patched version themselves.
+
+Accepted until 2027-01-15: `braces` GHSA-vfj7-8cjw-p6xm. No patched release
+exists. It is reached only through eslint-config-next and vinext's
+vite-plugin-commonjs, neither of which runs on Vercel, and both only expand glob
+patterns written in this repository. Recheck https://github.com/advisories/GHSA-vfj7-8cjw-p6xm
+before the review date.

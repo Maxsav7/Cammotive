@@ -18,7 +18,8 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit -p tsconfig.next.json",
     "db:check": "drizzle-kit generate && git diff --exit-code -- drizzle && test -z \"$(git status --porcelain -- drizzle)\"",
-    "test:browser": "npm run build:vercel && playwright test"
+    "test:browser": "npm run build:vercel && playwright test",
+    "security:audit": "node scripts/audit.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",
@@ -51,7 +52,9 @@
     "fflate": "0.8.3",
     "@esbuild-kit/core-utils": {
       "esbuild": "0.25.12"
-    }
+    },
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2"
   },
   "type": "module"
 }

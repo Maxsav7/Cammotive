@@ -22,7 +22,8 @@ jobs:
       with:
         node-version: 22.x
     - run: npm ci --ignore-scripts
-    - run: npm audit --audit-level=high
+    - name: Audit (production deps must be clean; dev exceptions need a reason + review date)
+      run: npm run security:audit
   build:
 
     runs-on: ubuntu-latest
