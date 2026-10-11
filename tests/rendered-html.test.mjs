@@ -14,7 +14,7 @@ before(async () => {
     "node_modules/wrangler/bin/wrangler.js", "dev",
     "--config", "dist/server/wrangler.json", "--local",
     "--ip", "127.0.0.1", "--port", "4179", "--inspector-port", "0",
-  ], { env: { ...process.env, CLOUDFLARE_D1_API_TOKEN: "", CI: "true", WRANGLER_SEND_METRICS: "false" }, stdio: ["ignore", "pipe", "pipe"] });
+  ], { env: { ...process.env, BOOKING_ENABLED: "false", CLOUDFLARE_D1_API_TOKEN: "", CI: "true", WRANGLER_SEND_METRICS: "false" }, stdio: ["ignore", "pipe", "pipe"] });
   server.stdout.on("data", chunk => { logs += chunk; });
   server.stderr.on("data", chunk => { logs += chunk; });
   server.on("error", error => { logs += error.message; });
@@ -59,6 +59,20 @@ test("all supported customer pages render", async () => {
   }
 });
 
+test("services tell visual stories without inventing treatment results", async () => {
+  const page = await html("/");
+  for (const id of ["story-exterior", "story-interior", "story-correction", "story-coating", "story-tint"]) {
+    assert.match(page, new RegExp(`id="${id}"`));
+    assert.match(page, new RegExp(`href="#${id}"`));
+  }
+  assert.match(page, /During the wash/);
+  assert.match(page, /not a documented paint-correction result/);
+  assert.match(page, /coating treatment is not documented/);
+  assert.match(page, /Window tint enquiries/);
+  assert.match(page, /preload="none"/);
+  assert.doesNotMatch(page, /<video[^>]*autoplay/i);
+});
+
 test("gallery exposes 17 photos and two opt-in video players", async () => {
   const page = await html("/our-work");
   assert.equal((page.match(/aria-label="View full photo:/g) ?? []).length, 17);
@@ -81,7 +95,7 @@ test("unknown pages return 404", async () => {
   assert.equal((await fetch(`${origin}/not-a-camotive-page`)).status, 404);
 });
 
-test("unconfigured Vercel booking fails clearly without creating an appointment", { skip: !useNext }, async () => {
+test("unconfigured booking fails closed on either runtime", async () => {
   for (const options of [{ method: "GET" }, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }]) {
     const response = await fetch(`${origin}/api/appointments?code=CAM-TEST`, options);
     assert.equal(response.status, 503);
@@ -89,4 +103,16 @@ test("unconfigured Vercel booking fails clearly without creating an appointment"
     assert.match(body.error, /temporarily unavailable/);
     assert.equal(body.confirmationCode, undefined);
   }
+});
+
+test("security headers and private API cache policy are present", async () => {
+  const response = await fetch(origin);
+  assert.equal(response.headers.get("x-frame-options"), "DENY");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.match(response.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+  const status = await fetch(`${origin}/api/appointments/status`);
+  assert.match(status.headers.get("cache-control"), /no-store/);
+  assert.equal((await status.json()).enabled, false);
+  assert.doesNotMatch(await html("/book"), /<form/);
 });

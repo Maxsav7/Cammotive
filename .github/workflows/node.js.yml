@@ -3,6 +3,9 @@
 
 name: Node.js CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ "main" ]
@@ -10,6 +13,16 @@ on:
     branches: [ "main" ]
 
 jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+    - run: npm ci --ignore-scripts
+    - run: npm audit --audit-level=high
   build:
 
     runs-on: ubuntu-latest
@@ -24,5 +37,10 @@ jobs:
         node-version: 22.x
         cache: 'npm'
     - run: npm ci
+    - run: npm run security:secrets
+    - run: npm run typecheck
+    - name: Database migrations match db/schema.ts
+      run: npm run db:check
+    - run: npm run test:security
     - run: npm test
     - run: npm run test:vercel

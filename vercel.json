@@ -1,5 +1,8 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build:vercel",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "crons": [
+    { "path": "/api/internal/booking-maintenance", "schedule": "0 11 * * *" }
+  ]
 }
