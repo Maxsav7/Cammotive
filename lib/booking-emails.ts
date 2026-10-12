@@ -18,7 +18,7 @@ export function longDate(date: string) {
 const firstName = (name: string) => name.trim().split(/\s+/)[0];
 const summary = (d: BookingDetails) =>
   `${d.packageName}${d.addOns ? ` + ${d.addOns}` : ""}\n${longDate(d.date)} at ${d.time}\n${d.vehicle}\n${d.address}\nEstimate: $${d.total} (final price confirmed before work begins)`;
-const beforeWeArrive = `Before Cam arrives: please have an outdoor water connection and a power outlet within reach of the vehicle, and make sure Cam can access the parking spot (gate codes, HOA or apartment permission).\nA ${depositPercent}% deposit is collected on site before work begins.`;
+const beforeWeArrive = `Before we arrive: please have an outdoor water connection and a power outlet within reach of the vehicle, and make sure we can access the parking spot (gate codes, HOA or apartment permission).\nA ${depositPercent}% deposit is collected on site before work begins.`;
 
 export function accessEmail(code: string, email: string, accessToken: string): Email {
   // The token travels in the URL fragment, which is never sent to servers or logged.
@@ -32,7 +32,7 @@ export function requestReceivedEmail(code: string, d: BookingDetails, accessToke
   return { to: d.email, subject: `Request received: ${longDate(d.date)} at ${d.time}`, text:
 `Hi ${firstName(d.name)},
 
-Your request is in. This is not a confirmation yet: Cam reviews every request and will email you as soon as it's confirmed. Your time slot is held for you in the meantime.
+Your request is in. This is not a confirmation yet: we review every request and will email you as soon as it's confirmed. Your time slot is held for you in the meantime.
 
 ${summary(d)}
 
@@ -64,7 +64,7 @@ export function confirmedEmail(code: string, d: BookingDetails): Email {
   return { to: d.email, subject: `Confirmed: ${longDate(d.date)} at ${d.time}`, text:
 `Hi ${firstName(d.name)},
 
-You're confirmed. Cam will arrive at ${d.time} on ${longDate(d.date)}.
+You're confirmed. We'll arrive at ${d.time} on ${longDate(d.date)}.
 
 ${summary(d)}
 
@@ -79,12 +79,12 @@ Camotive Detailing`,
 }
 
 export function declinedEmail(code: string, d: BookingDetails): Email {
-  return { to: d.email, subject: `Cam can't take ${longDate(d.date)} at ${d.time}`, text:
+  return { to: d.email, subject: `We can't take ${longDate(d.date)} at ${d.time}`, text:
 `Hi ${firstName(d.name)},
 
-Cam isn't able to take your requested time (${longDate(d.date)} at ${d.time}), so this request (${code}) is not booked and the time has been released.
+We aren't able to take your requested time (${longDate(d.date)} at ${d.time}), so this request (${code}) is not booked and the time has been released.
 
-Please choose another time at ${configuredOrigin()}/book, or call or text ${PHONE} and Cam will find one with you.
+Please choose another time at ${configuredOrigin()}/book, or call or text ${PHONE} and we'll find one with you.
 
 Camotive Detailing` };
 }
@@ -93,7 +93,7 @@ export function reminderEmail(code: string, d: BookingDetails): Email {
   return { to: d.email, subject: `Reminder: Camotive detail tomorrow at ${d.time}`, text:
 `Hi ${firstName(d.name)},
 
-A reminder that Cam arrives tomorrow, ${longDate(d.date)}, at ${d.time}.
+A reminder that we arrive tomorrow, ${longDate(d.date)}, at ${d.time}.
 
 ${summary(d)}
 
@@ -126,9 +126,9 @@ export function quoteReceivedEmail(reference: string, q: QuoteDetails): Email {
   return { to: q.email, subject: `Quote request received: ${q.service}`, text:
 `Hi ${firstName(q.name)},
 
-Thanks, Cam has your ${q.service.toLowerCase()} request for your ${q.vehicle} and will reply within one business day.
+Thanks, we have your ${q.service.toLowerCase()} request for your ${q.vehicle} and will reply within one business day.
 
-Photos help Cam quote accurately: text a few clear photos of the vehicle in daylight to ${PHONE} and mention reference ${reference}.
+Photos help us quote accurately: text a few clear photos of the vehicle in daylight to ${PHONE} and mention reference ${reference}.
 
 Camotive Detailing` };
 }

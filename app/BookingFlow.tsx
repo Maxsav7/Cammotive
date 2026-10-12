@@ -16,7 +16,7 @@ type Status = { enabled: boolean; siteKey?: string | null };
 const PHONE = "(210) 573-0671";
 const packages: Record<PackageId, { blurb: string; time: string }> = {
   full: { blurb: "A complete interior and exterior reset for a normally maintained vehicle.", time: "About 3–4 hours" },
-  premium: { blurb: "Everything in Full, plus shampoo or extraction, leather care and a 3–6 month sealant.", time: "Longer visit; Cam confirms timing" },
+  premium: { blurb: "Everything in Full, plus shampoo or extraction, leather care and a 3–6 month sealant.", time: "Longer visit; we confirm timing" },
   maintenance: { blurb: "For returning clients every 2–4 weeks, keeping a detailed car that way.", time: "Shorter visit" },
 };
 const sizes: Record<Size, string> = { small: "Coupe or sedan", medium: "Crossover, small SUV or truck", large: "Full-size truck or 3-row SUV" };
@@ -83,7 +83,7 @@ function AvailabilityCalendar({ value, time, onPick }: { value: string; time: st
       {selected ? <div className="slot-list">{selected.slots.map(s => <button type="button" key={s.time} disabled={s.state !== "open"} aria-pressed={time === s.time}
         className={time === s.time ? "selected" : ""} onClick={() => onPick(selected.date, s.time)}>
         <strong>{s.time}</strong><small>{s.state === "open" ? (s.time === "8:00 AM" ? "Morning arrival" : "Afternoon arrival") : "Taken"}</small></button>)}</div>
-        : <p className="slot-hint">Days with an open dot have at least one time available. Cam arrives at the start of your slot.</p>}
+        : <p className="slot-hint">Days with an open dot have at least one time available. We arrive at the start of your slot.</p>}
     </div>
   </div>;
 }
@@ -143,8 +143,8 @@ export default function BookingFlow() {
 
   if (done) return <div className="booking-shell" ref={top}><div className="booking-done" role="status">
     <p className="eyebrow">Request received</p>
-    <h3 tabIndex={-1}>Your time is held. Cam will confirm it shortly.</h3>
-    <p>This isn&apos;t a confirmation yet. We&apos;ve emailed you a copy of your request, and you&apos;ll get a second email the moment Cam confirms.</p>
+    <h3 tabIndex={-1}>Your time is held. We&apos;ll confirm it shortly.</h3>
+    <p>This isn&apos;t a confirmation yet. We&apos;ve emailed you a copy of your request, and you&apos;ll get a second email the moment it&apos;s confirmed.</p>
     <dl className="done-summary">
       <div><dt>Reference</dt><dd>{done.code}</dd></div>
       <div><dt>When</dt><dd>{fmt(date, { weekday: "long", month: "long", day: "numeric" })}, {time}</dd></div>
@@ -153,9 +153,9 @@ export default function BookingFlow() {
     </dl>
     <ol className="after-steps">
       <li><strong>Now</strong> Your request is in and the slot is held.</li>
-      <li><strong>Shortly</strong> Cam confirms, and you get a confirmation email with a calendar invite.</li>
+      <li><strong>Shortly</strong> We confirm, and you get a confirmation email with a calendar invite.</li>
       <li><strong>Day before</strong> A reminder email with everything you need.</li>
-      <li><strong>On the day</strong> Cam arrives at {time}. A {depositPercent}% deposit is collected before work begins.</li>
+      <li><strong>On the day</strong> We arrive at {time}. A {depositPercent}% deposit is collected before work begins.</li>
     </ol>
   </div></div>;
 
@@ -172,7 +172,7 @@ export default function BookingFlow() {
           <span className="package-name">{prices[id].name}</span><span className="package-price">from ${prices[id].small}</span>
           <small>{packages[id].blurb}</small><small className="package-time">{packages[id].time}</small></button>)}
       </div>
-      <p className="quote-aside">Ceramic coating, paint correction or window tint? Those are quoted first. <a className="text-link" href="/quote">Request a quote</a></p>
+      <p className="quote-aside">Ceramic coating or paint correction? Those are quoted first. <a className="text-link" href="/quote">Request a quote</a></p>
       <h4>Vehicle size</h4>
       <div className="size-choice-grid" role="radiogroup" aria-label="Vehicle size">
         {(Object.keys(sizes) as Size[]).map(s => <button type="button" role="radio" aria-checked={size === s} key={s} className={size === s ? "selected" : ""} onClick={() => setSize(s)}>
@@ -186,7 +186,7 @@ export default function BookingFlow() {
 
     {step === 2 && <div className="booking-panel">
       <button type="button" className="back" onClick={() => go(1)}>Back</button>
-      <h3 tabIndex={-1}>When should Cam come by?</h3>
+      <h3 tabIndex={-1}>When should we come by?</h3>
       {error && <p className="form-error" role="alert">{error}</p>}
       <AvailabilityCalendar value={date} time={time} onPick={(d, t) => { setDate(d); setTime(t); setError(""); }} />
       <div className="booking-footer"><div><small>Your time</small><strong className="selection-text">{date && time ? `${fmt(date, { weekday: "short", month: "short", day: "numeric" })}, ${time}` : "Choose a day and time"}</strong></div>
@@ -216,10 +216,10 @@ export default function BookingFlow() {
         <div><dt>Contact</dt><dd>{contact.name}<br />{contact.phone} · {contact.email}</dd><button type="button" className="text-button" onClick={() => go(3)}>Change</button></div>
       </dl>
       <ul className="review-notes">
-        <li>Estimate <strong>${total}</strong>. Cam confirms the final price before starting.</li>
+        <li>Estimate <strong>${total}</strong>. We confirm the final price before starting.</li>
         <li>A <strong>{depositPercent}% deposit</strong> is collected on site before work begins.</li>
         <li>Please have water and a power outlet within reach, and access to the parking spot.</li>
-        <li>This sends a request. Your slot is held until Cam confirms it by email.</li>
+        <li>This sends a request. Your slot is held until we confirm it by email.</li>
       </ul>
       <BookingChallenge key={challenge} siteKey={status.siteKey!} action="booking" onToken={setBotToken} />
       {error && <p className="form-error" role="alert">{error}</p>}

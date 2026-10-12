@@ -737,3 +737,4 @@ p { text-wrap: pretty; }
   .done-summary > div:last-child { border-bottom: 0; }
   .done-summary dd { margin: 0; text-align: right; }
 }
+.convenience-grid > a > div { padding: 26px 24px 28px; }

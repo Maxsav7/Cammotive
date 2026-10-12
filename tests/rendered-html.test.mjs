@@ -59,23 +59,26 @@ test("all supported customer pages render", async () => {
   }
 });
 
-test("services tell visual stories without inventing treatment results", async () => {
+test("services are described plainly, as a team, with no tint and no repeated photos", async () => {
   const page = await html("/");
-  for (const id of ["story-exterior", "story-interior", "story-correction", "story-coating", "story-tint"]) {
+  for (const id of ["story-exterior", "story-interior", "story-correction", "story-coating"]) {
     assert.match(page, new RegExp(`id="${id}"`));
     assert.match(page, new RegExp(`href="#${id}"`));
   }
-  assert.match(page, /During the wash/);
-  assert.match(page, /not a documented paint-correction result/);
-  assert.match(page, /coating treatment is not documented/);
-  assert.match(page, /Window tint/);
-  assert.match(page, /preload="none"/);
-  assert.doesNotMatch(page, /<video[^>]*autoplay/i);
+  assert.doesNotMatch(page, /tint/i);
+  const photos = [...page.matchAll(/src="\/work\/([a-z0-9-]+)\.jpg"/g)].map(m => m[1]);
+  assert.equal(new Set(photos).size, photos.length, `repeated photo on the homepage: ${photos}`);
 });
 
-test("gallery exposes 21 photos and four opt-in video players", async () => {
+test("customer-facing pages never name an individual", async () => {
+  for (const route of ["", "mobile-detailing", "ceramic-coating", "paint-correction", "book", "quote", "contact", "reviews", "appointment", "locations"]) {
+    assert.doesNotMatch(await html(`/${route}`), /\bCam\b/, `/${route} mentions Cam`);
+  }
+});
+
+test("gallery exposes 15 distinct photos and four opt-in video players", async () => {
   const page = await html("/our-work");
-  assert.equal((page.match(/aria-label="View full photo:/g) ?? []).length, 21);
+  assert.equal((page.match(/aria-label="View full photo:/g) ?? []).length, 15);
   assert.equal((page.match(/<video\b/g) ?? []).length, 4);
   assert.doesNotMatch(page, /<video[^>]*autoplay/i);
   for (const path of ["mclaren-hero.jpg", "mclaren-interior.jpg", "detail-2282.mp4", "detail-2278.mp4", "mach-e-front.jpg", "mach-e-ceramic.mp4", "glass-coating.mp4"]) {

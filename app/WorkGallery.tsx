@@ -17,13 +17,7 @@ const photos = [
   ["tundra-cabin", "Toyota Tundra front cabin", "Interior"],
   ["bmw-foam", "BMW foam wash", "Exterior"],
   ["tundra-rear-seats", "Toyota Tundra rear seats and floor", "Interior"],
-  ["tundra-finish", "Toyota Tundra paint and trim", "Exterior"],
   ["tundra-console", "Toyota Tundra center console", "Interior"],
-  ["lamborghini-front", "Lamborghini exterior wash", "Exterior"],
-  ["tundra-steering", "Toyota Tundra steering wheel and dashboard", "Interior"],
-  ["tundra-passenger", "Toyota Tundra passenger footwell", "Interior"],
-  ["tundra-driver-floor", "Toyota Tundra driver floor and mat", "Interior"],
-  ["tundra-rear-floor", "Toyota Tundra rear floor mats", "Interior"],
 ] as const;
 
 export default function WorkGallery() {
