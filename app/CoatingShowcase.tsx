@@ -47,7 +47,7 @@ export default function CoatingShowcase() {
           <li>3-year and 5-year ceramic options</li>
           <li>Glass coating for windshields and exterior glass</li>
         </ul>
-        <div className="hero-actions"><a className="button" href="/contact#quote">Get a coating quote ↗</a><a className="text-link" href="#pricing">See coating packages →</a></div>
+        <div className="hero-actions"><a className="button" href="/contact#quote">Get a coating quote</a><a className="text-link" href="#pricing">See coating packages</a></div>
       </div>
     </div>
     <div className="showcase-grid">
