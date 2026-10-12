@@ -737,3 +737,38 @@ p { text-wrap: pretty; }
   .done-summary > div:last-child { border-bottom: 0; }
   .done-summary dd { margin: 0; text-align: right; }
 }
+
+/* ---------- shadcn/ui bridge ----------
+   shadcn components are styled with Tailwind tokens (bg-card, text-muted-foreground,
+   border…). These alias them to the Camotive tokens above, so components follow the
+   .site-shell light/dark toggle. The chrome material is used through Button's
+   `chrome` variant rather than a token, since it is a gradient. */
+@custom-variant dark (&:where(.site-shell:not([data-theme="light"]), .site-shell:not([data-theme="light"]) *));
+@theme inline {
+  --color-background: var(--bg, #121117);
+  --color-foreground: var(--text, #ededf2);
+  --color-card: var(--surface, #19181f);
+  --color-card-foreground: var(--text, #ededf2);
+  --color-popover: var(--surface, #19181f);
+  --color-popover-foreground: var(--text, #ededf2);
+  --color-primary: var(--text, #ededf2);
+  --color-primary-foreground: var(--bg, #121117);
+  --color-secondary: var(--soft, #1f1e26);
+  --color-secondary-foreground: var(--text, #ededf2);
+  --color-muted: var(--soft, #1f1e26);
+  --color-muted-foreground: var(--muted, #a3a2ae);
+  --color-accent: var(--soft, #1f1e26);
+  --color-accent-foreground: var(--text, #ededf2);
+  --color-destructive: #e5484d;
+  --color-border: var(--line, #2b2a33);
+  --color-input: var(--line-strong, #3a3943);
+  --color-ring: var(--accent, #b9addf);
+}
+/* A bare `border` on a shadcn part uses the theme line color, not currentColor. */
+@layer base { [data-slot] { border-color: var(--line, #2b2a33); } }
+/* The unlayered `a { color: inherit; text-decoration: none }` reset would beat Tailwind
+   utilities on <Button asChild><a/></Button>; hand those back to the utility layer. */
+a[data-slot] { color: revert-layer; text-decoration: revert-layer; }
+/* Recommended-package panel, matching .price-card.highlight in both themes. */
+.site-shell { --panel-featured: linear-gradient(180deg, #24232c 0%, #19181f 100%); --line-featured: var(--line-strong); }
+.site-shell[data-theme="light"] { --panel-featured: linear-gradient(#ffffff, #ffffff); --line-featured: var(--text); }

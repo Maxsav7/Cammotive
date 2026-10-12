@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-const photos = [
+export const photos = [
   ["mach-e-front", "Mustang Mach-E GT after ceramic coating", "Coating"],
   ["mach-e-side", "Mustang Mach-E GT coated profile", "Coating"],
   ["maverick-front", "Ford Maverick after ceramic coating", "Coating"],

@@ -18,7 +18,7 @@ import { depositPercent } from "../lib/booking-catalog";
 type PackageId = "full" | "premium" | "maintenance" | "ceramic3" | "ceramic5";
 type VehicleSize = "small" | "medium" | "large";
 
-const packages = {
+export const packages = {
   full: { name: "Full Detail", prices: { small: 250, medium: 300, large: 350 }, note: "A complete interior and exterior reset for normally maintained vehicles. About 3–4 hours.",
     features: ["Hand wash, wheels and tires", "Vacuum seats, carpets, mats and cargo", "Interior surfaces cleaned and protected", "No added paint sealant"] },
   premium: { name: "Premium Detail", prices: { small: 350, medium: 425, large: 500 }, note: "A deeper clean with added paint protection for vehicles needing more care.",
