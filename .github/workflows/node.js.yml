@@ -60,6 +60,8 @@ jobs:
     - run: npx playwright install --with-deps chromium
     - name: Every page on desktop and phone (errors, layout, accessibility)
       run: npm run test:browser
+    - name: Booking end to end (request, Cam approves, confirmation email) against local fakes
+      run: npx playwright test -c playwright.e2e.config.mjs
     - uses: actions/upload-artifact@v4
       if: failure()
       with:

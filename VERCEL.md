@@ -39,9 +39,24 @@ production.
 5. **Remaining variables.** `BOOKING_ORIGIN` (exact https origin, no trailing
    slash), `RESEND_API_KEY`, `CAM_BOOKING_EMAIL`. See `.env.example`.
 6. **Test.** Set `BOOKING_SCHEDULER_READY=true` and `BOOKING_ENABLED=true`,
-   redeploy, then: book a date, confirm both emails arrive, open the private
-   link, request a replacement link, and confirm a second booking on the same
-   date is refused.
+   redeploy, then: book a detail, check the "request received" email arrives,
+   open Cam's "New request" email and confirm it, check the confirmation email
+   (with calendar invite) arrives, and check the slot now shows as taken.
+
+## How booking works
+
+- Only detailing (Full, Premium, Maintenance) is booked online. Ceramic coating,
+  paint correction, window tint and anything else go through `/quote`, which
+  emails Cam and sends the customer an acknowledgement.
+- Two slots a day, every day: **8:00 AM and 1:00 PM** (Central time), from
+  tomorrow up to 90 days ahead. Change them in `lib/booking-catalog.ts`
+  (`bookingTimes`, `slotStart`).
+- A request holds the slot as **pending**. Cam gets an email with a private
+  link to `/manage`, where he confirms or declines. Confirming emails the
+  customer a confirmation with a calendar invite (.ics); declining emails them
+  and releases the slot. Keep those emails private: the link is the key.
+- The daily cron sends a reminder email the day before each confirmed detail.
+- Nothing is charged online. The site states the 10% deposit collected on site.
 
 ## How emails are delivered
 
@@ -63,4 +78,6 @@ if the schema and `drizzle/` disagree.
 
 ## Before every deploy
 
-`npm run typecheck`, `npm run test:security`, `npm test`, `npm run test:vercel`.
+`npm run typecheck`, `npm run test:security`, `npm test`, `npm run test:vercel`,
+`npm run test:browser`, and `npm run test:e2e` (the whole booking flow against
+local fakes of D1, Turnstile and Resend).

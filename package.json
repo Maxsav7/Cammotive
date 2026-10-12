@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.next.json",
     "db:check": "drizzle-kit generate && git diff --exit-code -- drizzle && test -z \"$(git status --porcelain -- drizzle)\"",
     "test:browser": "npm run build:vercel && playwright test",
+    "test:e2e": "npm run build:vercel && playwright test -c playwright.e2e.config.mjs",
     "security:audit": "node scripts/audit.mjs",
     "test:dev": "node scripts/dev-smoke.mjs"
   },
