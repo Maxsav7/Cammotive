@@ -45,6 +45,8 @@ jobs:
     - run: npm run test:security
     - run: npm test
     - run: npm run test:vercel
+    - name: Local dev server (Turbopack) serves every page and icon
+      run: npm run test:dev
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -58,6 +60,8 @@ jobs:
     - run: npx playwright install --with-deps chromium
     - name: Every page on desktop and phone (errors, layout, accessibility)
       run: npm run test:browser
+    - name: Booking end to end (request, Cam approves, confirmation email) against local fakes
+      run: npx playwright test -c playwright.e2e.config.mjs
     - uses: actions/upload-artifact@v4
       if: failure()
       with:

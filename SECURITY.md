@@ -10,6 +10,11 @@ API returns 503 and the UI shows the call/text alternative.
    on a database that already has the legacy `appointments` table or the earlier
    hand-written schema; existing appointments are preserved. `db/schema.ts` is
    the single source of truth and CI fails if it drifts from `drizzle/`.
+   The booking schema was regenerated for approval-based booking (two slots per
+   day, pending/confirmed/declined). Apply it to a new D1 database. If a
+   database was created from an earlier version and never took customer
+   bookings, drop its `secure_bookings` table before applying, because
+   `IF NOT EXISTS` won't replace the old one-booking-per-day table.
 2. Set the variables below in the hosting secret manager, not in Git. Use
    different databases, keys, bot widgets and sender identities for previews.
    Never give a preview deployment production customer data or provider keys.
@@ -27,8 +32,11 @@ API returns 503 and the UI shows the call/text alternative.
    scheduler POST it every few minutes with `Bearer <BOOKING_CRON_SECRET>`.
    Alert on missed runs, non-2xx responses or a nonzero `failed` count (also
    logged as `booking_email_failed_count`).
-6. Test with your own mailbox: book, receive email, view by private link, request
-   a replacement, retry the booking, and verify no duplicate appointment/email.
+6. Test with your own mailbox: book, receive the request email, confirm it from
+   Cam's email link, receive the confirmation, view by private link, request a
+   replacement, retry the booking, and verify no duplicate appointment/email.
+   Cam's `/manage` link grants approve/decline for that one booking; treat the
+   `CAM_BOOKING_EMAIL` mailbox as an admin credential (use 2FA).
    Verify hosting headers and least-privilege credentials. Only then set
    `BOOKING_SCHEDULER_READY=true` and `BOOKING_ENABLED=true` for customers.
 

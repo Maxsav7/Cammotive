@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const pages = ["/", "/mobile-detailing", "/ceramic-coating", "/paint-correction", "/locations", "/stone-oak",
-  "/alamo-heights", "/the-dominion", "/leon-springs", "/downtown", "/our-work", "/reviews", "/contact", "/book", "/appointment"];
+  "/alamo-heights", "/the-dominion", "/leon-springs", "/downtown", "/our-work", "/reviews", "/contact", "/book", "/appointment", "/quote", "/manage"];
 
 // Collects browser errors and broken same-origin requests for the current page.
 function watch(page) {
@@ -79,4 +79,45 @@ test("theme toggle switches between dark and light", async ({ page }) => {
 test("unknown pages return 404", async ({ page }) => {
   const response = await page.goto("/not-a-camotive-page");
   expect(response?.status()).toBe(404);
+});
+
+test("phone menu traps focus, closes on Escape, and returns focus to the menu button", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "phone-only menu");
+  await page.goto("/");
+  const toggle = page.getByRole("button", { name: "Open navigation" });
+  await toggle.click();
+  const panel = page.getByRole("dialog", { name: "Site menu" });
+  await expect(panel).toBeVisible();
+  await expect(page.locator(":focus")).toHaveAttribute("href", "/"); // first link in the panel
+  for (let i = 0; i < 25; i++) await page.keyboard.press("Tab");
+  expect(await panel.evaluate(el => el.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await expect(page.getByRole("button", { name: "Open navigation" })).toBeFocused();
+});
+
+test("phone menu groups expand and links navigate", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "phone-only menu");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await page.getByRole("button", { name: "Services" }).click();
+  await page.getByRole("dialog", { name: "Site menu" }).getByRole("link", { name: "Ceramic Coating" }).click();
+  await expect(page).toHaveURL(/\/ceramic-coating$/);
+});
+
+test("ceramic coating page shows the client coating showcase", async ({ page }) => {
+  await page.goto("/ceramic-coating");
+  const showcase = page.locator(".coating-showcase");
+  await expect(showcase.getByRole("heading", { name: "Depth you can see in daylight." })).toBeVisible();
+  await expect(showcase.locator(".showcase-card img")).toHaveCount(4);
+  await expect(showcase.locator("video")).toHaveCount(2);
+  const feature = showcase.locator(".showcase-video");
+  await feature.scrollIntoViewIfNeeded();
+  expect(await feature.evaluate(v => v.muted)).toBe(true);
+});
+
+test("our work gallery can filter to coating projects", async ({ page }) => {
+  await page.goto("/our-work");
+  await page.getByRole("button", { name: "Coating" }).click();
+  await expect(page.locator(".photo-grid figure")).toHaveCount(4);
 });

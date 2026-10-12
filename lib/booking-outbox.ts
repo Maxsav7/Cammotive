@@ -1,26 +1,23 @@
 import { after } from "next/server";
 import { db, limit } from "./booking-store";
-import { configuredOrigin, seal, token, unseal } from "./booking-security";
+import { seal, token, unseal } from "./booking-security";
+import { resendEmailsUrl } from "./providers";
 
-type Email = { to: string; subject: string; text: string };
-export async function emailJob(code: string, id: string, email: Email) {
+export type Attachment = { filename: string; content: string; contentType?: string }; // content is base64
+export type Email = { to: string; subject: string; text: string; attachments?: Attachment[] };
+export async function emailJob(code: string | null, id: string, email: Email) {
   return emailJobs(code, [[id, email]]);
 }
 // Several jobs as ONE multi-row INSERT: a single SQL statement is atomic on its
 // own, so this never depends on whether the D1 REST API runs batches as a transaction.
-export async function emailJobs(code: string, jobs: [id: string, email: Email][]) {
+export async function emailJobs(code: string | null, jobs: [id: string, email: Email][]) {
   const now = Math.floor(Date.now() / 1000);
   const params: unknown[] = [];
   for (const [id, email] of jobs) params.push(id, code, await seal(email), now, now + 23 * 3600);
   return db.prepare(`INSERT INTO booking_outbox (id, booking_code, payload, next_attempt, deadline) VALUES ${jobs.map(() => "(?, ?, ?, ?, ?)").join(", ")}`)
     .bind(...params);
 }
-export function accessEmail(code: string, email: string, accessToken: string): Email {
-  // Fragment isn't sent in HTTP request URLs, proxy logs or referrers.
-  const link = `${configuredOrigin()}/appointment#access=${accessToken}`;
-  return { to: email, subject: "Your Camotive appointment access link", text:
-    `Your reference is ${code}. Open your private appointment link (expires in 24 hours):\n${link}\n\nDo not forward this link. If you did not request this, ignore it. Questions? (210) 573-0671.` };
-}
+export { accessEmail } from "./booking-emails";
 export async function dispatchEmails(maximum = 5) {
   let sent = 0;
   for (let i = 0; i < maximum; i++) {
@@ -33,9 +30,10 @@ export async function dispatchEmails(maximum = 5) {
       // Global budget protects against distributed abuse as well as per-person abuse.
       await limit("email-budget", "global", 100, 86400);
       const email = await unseal(String(job.payload)) as Email;
-      const response = await fetch("https://api.resend.com/emails", {
+      const response = await fetch(resendEmailsUrl(), {
         method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": String(job.id) },
-        body: JSON.stringify({ from: process.env.BOOKING_FROM_EMAIL, to: [email.to], subject: email.subject, text: email.text }),
+        body: JSON.stringify({ from: process.env.BOOKING_FROM_EMAIL, to: [email.to], subject: email.subject, text: email.text,
+          ...(email.attachments?.length ? { attachments: email.attachments.map(a => ({ filename: a.filename, content: a.content, content_type: a.contentType })) } : {}) }),
         signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error("Email delivery failed");

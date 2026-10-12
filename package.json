@@ -19,7 +19,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.next.json",
     "db:check": "drizzle-kit generate && git diff --exit-code -- drizzle && test -z \"$(git status --porcelain -- drizzle)\"",
     "test:browser": "npm run build:vercel && playwright test",
-    "security:audit": "node scripts/audit.mjs"
+    "test:e2e": "npm run build:vercel && playwright test -c playwright.e2e.config.mjs",
+    "security:audit": "node scripts/audit.mjs",
+    "test:dev": "node scripts/dev-smoke.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",
@@ -31,6 +33,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
     "@cloudflare/vite-plugin": "1.62.5",
+    "@fontsource-variable/archivo": "5.3.0",
     "@playwright/test": "1.64.0",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "22.19.19",

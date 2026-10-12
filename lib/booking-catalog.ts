@@ -9,4 +9,19 @@ export const extras = {
   windshield: ["Windshield glass coating", 125], glass: ["All exterior glass coating", 225],
   headlight: ["Headlight restoration (pair)", 100], engine: ["Engine bay cleaning", 75],
 } as const;
-export const bookingTimes = ["8:00 AM", "10:30 AM", "1:30 PM", "4:00 PM"] as const;
+// Two mobile appointments a day, every day. A Full Detail takes about 3–4 hours.
+export const bookingTimes = ["8:00 AM", "1:00 PM"] as const;
+// Start time in 24h form, used for calendar invites and reminders.
+export const slotStart = { "8:00 AM": "08:00", "1:00 PM": "13:00" } as const;
+export const slotHours = 4;
+// Booked online; everything else is quoted by Cam first.
+export const bookablePackages = ["full", "premium", "maintenance"] as const;
+export const quoteServices = {
+  ceramic: "Ceramic coating",
+  correction: "Paint correction",
+  tint: "Window tint",
+  other: "Something else",
+} as const;
+export const depositPercent = 10;
+// Furthest date that can be requested online.
+export const bookingWindowDays = 90;

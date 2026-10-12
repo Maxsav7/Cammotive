@@ -68,17 +68,17 @@ test("services tell visual stories without inventing treatment results", async (
   assert.match(page, /During the wash/);
   assert.match(page, /not a documented paint-correction result/);
   assert.match(page, /coating treatment is not documented/);
-  assert.match(page, /Window tint enquiries/);
+  assert.match(page, /Window tint/);
   assert.match(page, /preload="none"/);
   assert.doesNotMatch(page, /<video[^>]*autoplay/i);
 });
 
-test("gallery exposes 17 photos and two opt-in video players", async () => {
+test("gallery exposes 21 photos and four opt-in video players", async () => {
   const page = await html("/our-work");
-  assert.equal((page.match(/aria-label="View full photo:/g) ?? []).length, 17);
-  assert.equal((page.match(/<video\b/g) ?? []).length, 2);
+  assert.equal((page.match(/aria-label="View full photo:/g) ?? []).length, 21);
+  assert.equal((page.match(/<video\b/g) ?? []).length, 4);
   assert.doesNotMatch(page, /<video[^>]*autoplay/i);
-  for (const path of ["mclaren-hero.jpg", "mclaren-interior.jpg", "detail-2282.mp4", "detail-2278.mp4"]) {
+  for (const path of ["mclaren-hero.jpg", "mclaren-interior.jpg", "detail-2282.mp4", "detail-2278.mp4", "mach-e-front.jpg", "mach-e-ceramic.mp4", "glass-coating.mp4"]) {
     const response = await fetch(`${origin}/work/${path}`, { method: "HEAD" });
     assert.equal(response.status, 200, path);
     assert.match(response.headers.get("content-type") ?? "", /image\/jpeg|video\/mp4/);
