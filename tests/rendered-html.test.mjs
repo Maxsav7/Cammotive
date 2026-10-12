@@ -68,7 +68,7 @@ test("services tell visual stories without inventing treatment results", async (
   assert.match(page, /During the wash/);
   assert.match(page, /not a documented paint-correction result/);
   assert.match(page, /coating treatment is not documented/);
-  assert.match(page, /Window tint enquiries/);
+  assert.match(page, /Window tint/);
   assert.match(page, /preload="none"/);
   assert.doesNotMatch(page, /<video[^>]*autoplay/i);
 });

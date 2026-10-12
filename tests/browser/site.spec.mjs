@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const pages = ["/", "/mobile-detailing", "/ceramic-coating", "/paint-correction", "/locations", "/stone-oak",
-  "/alamo-heights", "/the-dominion", "/leon-springs", "/downtown", "/our-work", "/reviews", "/contact", "/book", "/appointment"];
+  "/alamo-heights", "/the-dominion", "/leon-springs", "/downtown", "/our-work", "/reviews", "/contact", "/book", "/appointment", "/quote", "/manage"];
 
 // Collects browser errors and broken same-origin requests for the current page.
 function watch(page) {
@@ -100,9 +100,9 @@ test("phone menu groups expand and links navigate", async ({ page, isMobile }) =
   test.skip(!isMobile, "phone-only menu");
   await page.goto("/");
   await page.getByRole("button", { name: "Open navigation" }).click();
-  await page.getByRole("button", { name: "Locations" }).click();
-  await page.getByRole("dialog", { name: "Site menu" }).getByRole("link", { name: "Stone Oak" }).click();
-  await expect(page).toHaveURL(/\/stone-oak$/);
+  await page.getByRole("button", { name: "Services" }).click();
+  await page.getByRole("dialog", { name: "Site menu" }).getByRole("link", { name: "Ceramic Coating" }).click();
+  await expect(page).toHaveURL(/\/ceramic-coating$/);
 });
 
 test("ceramic coating page shows the client coating showcase", async ({ page }) => {

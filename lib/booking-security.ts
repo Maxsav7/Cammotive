@@ -1,3 +1,4 @@
+import { testMode, turnstileVerifyUrl } from "./providers";
 export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -10,7 +11,12 @@ export function failure(error: unknown) {
   return json({ error: "Online booking is temporarily unavailable. Please call (210) 573-0671." }, 503);
 }
 export function configuredOrigin() {
-  try { const url = new URL(process.env.BOOKING_ORIGIN ?? ""); return url.protocol === "https:" && url.origin === process.env.BOOKING_ORIGIN ? url.origin : null; }
+  try {
+    const url = new URL(process.env.BOOKING_ORIGIN ?? "");
+    // https only; plain http is accepted solely for loopback end-to-end tests.
+    const secure = url.protocol === "https:" || (testMode() && url.hostname === "127.0.0.1");
+    return secure && url.origin === process.env.BOOKING_ORIGIN ? url.origin : null;
+  }
   catch { return null; }
 }
 export function securityReady() {
@@ -57,7 +63,7 @@ export async function unseal(value: string) {
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, await encryptionKey(), data)));
 }
 export async function verifyBot(value: string, action: string) {
-  const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+  const response = await fetch(turnstileVerifyUrl(), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ secret: process.env.TURNSTILE_SECRET_KEY, response: value }), signal: AbortSignal.timeout(8000),
   });

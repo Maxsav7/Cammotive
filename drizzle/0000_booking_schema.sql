@@ -1,5 +1,5 @@
--- Edited after generation: IF NOT EXISTS so this is safe on a database that
--- already has the legacy `appointments` table or the earlier hand-written schema.
+-- Edited after generation: IF NOT EXISTS so this is safe to re-run and on a database
+-- that already has the legacy `appointments` table.
 CREATE TABLE IF NOT EXISTS `appointments` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`confirmation_code` text NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS `booking_limits` (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `booking_outbox` (
 	`id` text PRIMARY KEY NOT NULL,
-	`booking_code` text NOT NULL,
+	`booking_code` text,
 	`payload` text NOT NULL,
 	`attempts` integer DEFAULT 0 NOT NULL,
 	`next_attempt` integer NOT NULL,
@@ -46,14 +46,20 @@ CREATE TABLE IF NOT EXISTS `secure_bookings` (
 	`fingerprint` text NOT NULL,
 	`date` text NOT NULL,
 	`time` text NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
 	`email_hash` text NOT NULL,
 	`details` text NOT NULL,
 	`token_hash` text NOT NULL,
 	`token_expires` integer NOT NULL,
+	`admin_token_hash` text NOT NULL,
+	`decided_at` integer,
+	`reminder_sent` integer DEFAULT 0 NOT NULL,
 	`created_at` integer NOT NULL,
 	`delete_after` integer NOT NULL
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS `secure_bookings_request_key_unique` ON `secure_bookings` (`request_key`);--> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS `secure_bookings_date_unique` ON `secure_bookings` (`date`);--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS `secure_bookings_token` ON `secure_bookings` (`token_hash`);
+CREATE INDEX IF NOT EXISTS `secure_bookings_token` ON `secure_bookings` (`token_hash`);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `secure_bookings_admin_token` ON `secure_bookings` (`admin_token_hash`);--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS `secure_bookings_date` ON `secure_bookings` (`date`);--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS `secure_bookings_active_slot` ON `secure_bookings` (`date`,`time`) WHERE status in ('pending', 'confirmed');

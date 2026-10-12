@@ -5,6 +5,7 @@
 // nested groups with a staggered reveal. Built on CSS transitions instead of a
 // motion library; the global reduced-motion rule turns the movement off.
 import { useEffect, useRef, useState, type RefObject } from "react";
+import Logo from "./Logo";
 
 type Link = { href: string; label: string };
 type Group = { id: string; label: string; links: Link[] };
@@ -54,7 +55,7 @@ export default function MobileMenu({ open, onClose, triggerRef, page, groups }: 
     <button type="button" className="menu-scrim" aria-label="Close menu" tabIndex={open ? 0 : -1} onClick={onClose} />
     <div ref={panel} id="mobile-nav" className="menu-panel" role="dialog" aria-modal="true" aria-label="Site menu" aria-hidden={!open} inert={!open} onKeyDown={onKeyDown}>
       <div className="menu-head">
-        <a className="brand" href="/" onClick={onClose}><img src="/camotive-logo-original.png" alt="Camotive Detailing home" /></a>
+        <a className="brand" href="/" onClick={onClose} aria-label="Camotive Detailing home"><Logo /></a>
         <button type="button" className="menu-close" aria-label="Close menu" onClick={onClose}>✕</button>
       </div>
       <nav className="menu-body" aria-label="Mobile navigation">
@@ -72,7 +73,7 @@ export default function MobileMenu({ open, onClose, triggerRef, page, groups }: 
         {item({ href: "/appointment", label: "My appointment" })}
       </nav>
       <div className="menu-foot">
-        <a className="button" href="/book" onClick={onClose}>Schedule online <span>→</span></a>
+        <a className="button" href="/book" onClick={onClose}>Book a detail</a>
         <a className="menu-phone" href="tel:+12105730671">Call or text (210) 573-0671</a>
       </div>
     </div>

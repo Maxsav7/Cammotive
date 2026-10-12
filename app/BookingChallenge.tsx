@@ -13,7 +13,7 @@ function loadScript() {
   }).catch(error => { scriptReady = undefined; throw error; });
   return scriptReady;
 }
-export default function BookingChallenge({ siteKey, action, onToken }: { siteKey: string; action: "booking" | "recovery"; onToken: (token: string) => void }) {
+export default function BookingChallenge({ siteKey, action, onToken }: { siteKey: string; action: "booking" | "recovery" | "quote"; onToken: (token: string) => void }) {
   const container = useRef<HTMLDivElement>(null); const [error, setError] = useState(false);
   useEffect(() => {
     let active = true; let id: string | undefined;

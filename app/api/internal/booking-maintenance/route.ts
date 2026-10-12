@@ -1,6 +1,29 @@
 import { db, requireBooking } from "@/lib/booking-store";
-import { digest, failure, HttpError, json } from "@/lib/booking-security";
-import { dispatchEmails } from "@/lib/booking-outbox";
+import { digest, failure, HttpError, json, unseal } from "@/lib/booking-security";
+import { dispatchEmails, emailJob } from "@/lib/booking-outbox";
+import { reminderEmail, type BookingDetails } from "@/lib/booking-emails";
+import { addDays, chicagoDay } from "@/lib/booking-validation";
+
+// Queues a reminder for each confirmed appointment tomorrow (Chicago time). The
+// flag is claimed first so an overlapping run can't send a second reminder.
+async function queueReminders() {
+  const tomorrow = addDays(chicagoDay(), 1);
+  const due = await db.prepare("SELECT code FROM secure_bookings WHERE date = ? AND status = 'confirmed' AND reminder_sent = 0 LIMIT 25").bind(tomorrow).all();
+  let queued = 0;
+  for (const { code } of due.results ?? []) {
+    const claimed = await db.prepare("UPDATE secure_bookings SET reminder_sent = 1 WHERE code = ? AND reminder_sent = 0 RETURNING details").bind(code).first();
+    if (!claimed) continue;
+    try {
+      const details = await unseal(String(claimed.details)) as BookingDetails;
+      await (await emailJob(String(code), `${code}-reminder`, reminderEmail(String(code), details))).run();
+      queued++;
+    } catch {
+      await db.prepare("UPDATE secure_bookings SET reminder_sent = 0 WHERE code = ?").bind(code).run().catch(() => {});
+      console.error("booking_reminder_queue_failed");
+    }
+  }
+  return queued;
+}
 
 // Retries queued emails and purges expired data. Emails are normally sent right
 // after booking; this is the safety net. Callers:
@@ -28,18 +51,19 @@ async function maintain(request: Request) {
       db.prepare("DELETE FROM booking_limits WHERE expires < ?").bind(now),
       db.prepare("DELETE FROM secure_bookings WHERE delete_after < ?").bind(now),
       // A booking with no queued emails means the save was interrupted halfway;
-      // nobody was notified, so release the date. Outbox rows live at least 8 days,
+      // nobody was notified, so release the slot. Outbox rows live at least 8 days,
       // so only look at bookings younger than that.
       db.prepare(`DELETE FROM secure_bookings WHERE created_at < ? AND created_at > ?
         AND NOT EXISTS (SELECT 1 FROM booking_outbox WHERE booking_outbox.booking_code = secure_bookings.code)`).bind(now - 600, now - 6 * 86400),
       db.prepare("UPDATE booking_outbox SET status = 'failed', payload = '' WHERE status = 'pending' AND (deadline <= ? OR (attempts >= 5 AND lease_until < ?))").bind(now, now),
       db.prepare("DELETE FROM booking_outbox WHERE status IN ('sent', 'failed') AND deadline < ?").bind(now - 7 * 86400),
     ]);
+    const reminders = await queueReminders();
     const sent = await dispatchEmails(10);
     const failed = await db.prepare("SELECT count(*) AS count FROM booking_outbox WHERE status = 'failed'").first();
     const count = Number(failed?.count ?? 0);
     if (count > 0) console.error(`booking_email_failed_count=${count}`); // Shows up in Vercel logs for alerting.
-    return json({ sent, failed: count });
+    return json({ sent, reminders, failed: count });
   } catch (error) { return failure(error); }
 }
 
