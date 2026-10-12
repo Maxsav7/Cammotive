@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e105edab-a696-4bdd-9225-e4fe45ff46ab",
+  "id": "4c766e2e-4a73-42a0-9805-513e690376eb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "appointments": {
@@ -180,7 +180,7 @@
           "name": "booking_code",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "payload": {
@@ -303,6 +303,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
         "email_hash": {
           "name": "email_hash",
           "type": "text",
@@ -331,6 +339,28 @@
           "notNull": true,
           "autoincrement": false
         },
+        "admin_token_hash": {
+          "name": "admin_token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reminder_sent": {
+          "name": "reminder_sent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -354,19 +384,35 @@
           ],
           "isUnique": true
         },
-        "secure_bookings_date_unique": {
-          "name": "secure_bookings_date_unique",
-          "columns": [
-            "date"
-          ],
-          "isUnique": true
-        },
         "secure_bookings_token": {
           "name": "secure_bookings_token",
           "columns": [
             "token_hash"
           ],
           "isUnique": false
+        },
+        "secure_bookings_admin_token": {
+          "name": "secure_bookings_admin_token",
+          "columns": [
+            "admin_token_hash"
+          ],
+          "isUnique": false
+        },
+        "secure_bookings_date": {
+          "name": "secure_bookings_date",
+          "columns": [
+            "date"
+          ],
+          "isUnique": false
+        },
+        "secure_bookings_active_slot": {
+          "name": "secure_bookings_active_slot",
+          "columns": [
+            "date",
+            "time"
+          ],
+          "isUnique": true,
+          "where": "status in ('pending', 'confirmed')"
         }
       },
       "foreignKeys": {},

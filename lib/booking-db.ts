@@ -1,3 +1,4 @@
+import { d1Api } from "./providers";
 // Server-only D1 access for Node/Vercel. Cloudflare builds use the native binding.
 export function databaseReady() {
   return Boolean(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_D1_DATABASE_ID && process.env.CLOUDFLARE_D1_API_TOKEN);
@@ -12,7 +13,7 @@ async function query(queries: Query[]): Promise<Result[]> {
     if (!databaseReady()) throw new Error("Booking database is not configured");
     const account = encodeURIComponent(process.env.CLOUDFLARE_ACCOUNT_ID!);
     const database = encodeURIComponent(process.env.CLOUDFLARE_D1_DATABASE_ID!);
-    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${database}/query`, {
+    const response = await fetch(`${d1Api()}/accounts/${account}/d1/database/${database}/query`, {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_D1_API_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify(queries.length === 1 ? queries[0] : { batch: queries }),
