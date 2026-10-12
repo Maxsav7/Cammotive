@@ -1,7 +1,10 @@
 "use client";
 
 import WorkGallery from "./WorkGallery";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import ServiceStories from "./ServiceStories";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import BookingChallenge from "./BookingChallenge";
+import { prices, extras, bookingTimes } from "../lib/booking-catalog";
 
 type PackageId = "full" | "premium" | "maintenance" | "ceramic3" | "ceramic5";
 type AddOnId = "windshield" | "glass" | "headlight" | "engine";
@@ -49,7 +52,7 @@ const addOns = {
 
 const googleProfileUrl = "https://www.google.com/search?q=camotive+detailing+san+antonio&ludocid=11765857279964552273";
 
-const times = ["8:00 AM", "10:30 AM", "1:30 PM", "4:00 PM"];
+const times = bookingTimes;
 
 function formatDate(value: string) {
   if (!value) return "";
@@ -92,6 +95,25 @@ export default function Site({ page = "home" }: { page?: string }) {
   const [lookupCode, setLookupCode] = useState("");
   const [lookupResult, setLookupResult] = useState<Record<string, string> | null>(null);
   const [bookingError, setBookingError] = useState("");
+  const [lookupEmail, setLookupEmail] = useState("");
+  const [bookingStatus, setBookingStatus] = useState<{ enabled: boolean; siteKey?: string } | null>(null);
+  const [botToken, setBotToken] = useState("");
+  const [challengeVersion, setChallengeVersion] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const submission = useRef({ signature: "", key: "" });
+
+  useEffect(() => {
+    if (page !== "book" && page !== "appointment") return;
+    fetch("/api/appointments/status", { cache: "no-store" }).then(r => r.json()).then(setBookingStatus).catch(() => setBookingStatus({ enabled: false }));
+    const access = new URLSearchParams(window.location.hash.slice(1)).get("access");
+    if (page === "appointment" && access) {
+      window.history.replaceState(null, "", window.location.pathname);
+      if (!/^[a-f0-9]{64}$/.test(access)) { queueMicrotask(() => setLookupError("Invalid access link.")); return; }
+      fetch("/api/appointments", { headers: { Authorization: `Bearer ${access}` }, cache: "no-store" })
+        .then(async r => { const result = await r.json(); if (!r.ok) throw new Error(result.error); setLookupResult(result.appointment); })
+        .catch(() => setLookupError("This link is unavailable or expired. Request a new one below, or call Camotive."));
+    }
+  }, [page]);
 
   useEffect(() => {
     try {
@@ -121,7 +143,7 @@ export default function Site({ page = "home" }: { page?: string }) {
   }
 
   const total = useMemo(
-    () => packages[selectedPackage].prices[vehicleSize] + selectedAddOns.reduce((sum, id) => sum + addOns[id][1], 0),
+    () => prices[selectedPackage][vehicleSize] + selectedAddOns.reduce((sum, id) => sum + extras[id][1], 0),
     [selectedPackage, selectedAddOns, vehicleSize],
   );
 
@@ -131,11 +153,6 @@ export default function Site({ page = "home" }: { page?: string }) {
     return next.toISOString().slice(0, 10);
   }, []);
 
-  function scrollTo(id: string) {
-    setMenu(null);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-  }
-
   function toggleAddOn(id: AddOnId) {
     setSelectedAddOns((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
@@ -144,46 +161,55 @@ export default function Site({ page = "home" }: { page?: string }) {
 
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy || !botToken) return;
+    setBusy(true);
     setBookingError("");
     const form = new FormData(event.currentTarget);
     const payload = {
       packageId: selectedPackage,
-      packageName: `${packages[selectedPackage].name} · ${vehicleSize[0].toUpperCase()}${vehicleSize.slice(1)}`,
-      addOns: selectedAddOns.map((id) => addOns[id][0]).join(", "),
+      vehicleSize,
+      addOnIds: selectedAddOns,
       date,
       time,
-      total: String(total),
       name: String(form.get("name")),
       email: String(form.get("email")),
       phone: String(form.get("phone")),
       vehicle: String(form.get("vehicle")),
       address: String(form.get("address")),
-      reminder: String(form.get("reminder")),
     };
+    const signature = JSON.stringify(payload);
+    if (submission.current.signature !== signature) submission.current = { signature, key: crypto.randomUUID() };
+    try {
     const response = await fetch("/api/appointments", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json", "Idempotency-Key": submission.current.key },
+      body: JSON.stringify({ ...payload, turnstileToken: botToken }),
     });
     const result = await response.json();
     if (!response.ok || !result.confirmationCode) {
-      setBookingError("We couldn’t complete the booking. Please call or text (210) 573-0671.");
+      setBookingError(result.error || "We couldn’t complete the booking. Please call or text (210) 573-0671.");
       return;
     }
     setBooking({
-      ...payload,
+      date, time, packageName: result.packageName, total: String(result.total),
       confirmationCode: result.confirmationCode,
-      notificationStatus: result.notifications?.configured ? "sent" : "pending",
+      notificationStatus: "queued",
     });
     setStep(4);
+    } catch { setBookingError("Connection interrupted. Retry with the same details, or call Camotive."); }
+    finally { setBusy(false); setBotToken(""); setChallengeVersion(v => v + 1); }
   }
 
   async function lookupAppointment(event: FormEvent) {
     event.preventDefault();
-    const response = await fetch(`/api/appointments?code=${encodeURIComponent(lookupCode)}`);
-    const result = await response.json();
-    setLookupResult(result.appointment ?? null);
-    setLookupError(result.appointment ? "" : "No appointment found. Check the code or call Camotive for help.");
+    if (busy || !botToken) return;
+    setBusy(true); setLookupResult(null);
+    try {
+      const response = await fetch("/api/appointments/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: lookupCode, email: lookupEmail, turnstileToken: botToken }) });
+      const result = await response.json();
+      setLookupError(result.message || result.error || "Please call Camotive for help.");
+    } catch { setLookupError("Unable to request a link. Please call Camotive."); }
+    finally { setBusy(false); setBotToken(""); setChallengeVersion(v => v + 1); }
   }
 
 
@@ -252,10 +278,7 @@ export default function Site({ page = "home" }: { page?: string }) {
       <div id="main-content">
       {isHome ? <>
         <section className="hero" id="home"><img className="hero-photo" src="/work/mclaren-hero.jpg" alt="Black McLaren with its door raised, detailed by Camotive" fetchPriority="high" /><div className="hero-shade"/><div className="hero-copy"><p className="hero-location"><span/> San Antonio, Texas · Mobile service</p><h1>Mobile Detailing and<br className="desktop-break"/> Ceramic Coating<br className="desktop-break"/> in San Antonio, TX</h1><p className="hero-lede">Interior and exterior detailing, ceramic protection, and paint enhancement—at your home or workplace.</p><div className="hero-actions"><a className="button" href="/book">Schedule online <span>→</span></a><a className="outline-button" href="/contact#quote">Get a quote ↗</a></div><a className="hero-rating" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Rated 5.0 out of 5 — view Camotive on Google (opens in a new tab)"><b className="google-g" aria-hidden="true">G</b><strong>5.0</strong><span aria-hidden="true">★★★★★</span><small>Google reviews</small></a></div></section>
-        <section className="section services" id="services"><div className="section-heading centered"><p className="eyebrow">Our services</p><h2>A fresh start. A lasting finish.</h2><p>Complete mobile details and ceramic protection, with professional care at every step.</p></div><div className="service-cards">
-          <article className="service-card"><a className="service-image" href="/mobile-detailing"><img src="/work/tundra-cabin.jpg" alt="Toyota Tundra interior detailed by Camotive" loading="lazy"/><span>Mobile</span></a><div className="service-body"><h3>Mobile Detailing</h3><p>Interior, exterior, and complete care for your daily driver or weekend vehicle, wherever it fits your day.</p><ul><li>Full, premium & maintenance details</li><li>Home or workplace appointments</li><li>Simple online scheduling</li></ul><div className="card-actions"><a className="button" href="/book">Schedule online →</a><a className="text-link" href="/mobile-detailing">Explore services ↗</a></div></div></article>
-          <article className="service-card contrast"><a className="service-image" href="/ceramic-coating"><img src="/work/mclaren-front.jpg" alt="McLaren exterior finish" loading="lazy"/><span>Paint protection</span></a><div className="service-body"><h3>Ceramic Coating</h3><p>Careful paint preparation and long-term ceramic protection for a deep gloss and easier maintenance.</p><ul><li>3-year ceramic coating from $900</li><li>5-year ceramic coating from $1,300</li><li>Paint correction quoted separately</li></ul><div className="card-actions"><a className="button" href="/book?service=ceramic3">Schedule online →</a><a className="text-link" href="/ceramic-coating">Explore coatings ↗</a></div></div></article>
-        </div></section>
+        <ServiceStories />
         <section className="section convenience"><div className="section-heading centered"><p className="eyebrow">We come to you</p><h2>Your schedule. Your location.</h2><p>Professional detailing that works around your day, across San Antonio.</p></div><div className="convenience-grid photo-places">{[["tundra-exterior","Home","Enjoy a detail without leaving your driveway."],["bmw-foam","Workplace","Let us care for your vehicle while you work."],["tundra-cabin","Apartment","Contact us to confirm access and property permission."],["lamborghini-front","Approved location","We’ll help confirm a suitable place for your service."]].map(([photo,name,desc])=><a href="/locations" key={name}><img src={`/work/${photo}.jpg`} alt="" loading="lazy"/><div><h3>{name}</h3><p>{desc}</p></div></a>)}</div></section>
         <section className="coating-feature"><div className="coating-image"><img src="/work/mclaren-front.jpg" alt="McLaren paint and exterior finish" loading="lazy"/></div><div className="coating-copy"><p className="eyebrow">Ceramic protection</p><h2>Gloss you can see.<br/>Protection that lasts.</h2><p>Give your paint a carefully prepared finish and a layer of protection designed for easier upkeep.</p><ul><li>3-year and 5-year coating options</li><li>Preparation tailored to your paint condition</li><li>Gloss enhancement and easier maintenance</li><li>Paint correction available by quote</li></ul><div className="hero-actions"><a className="button" href="/contact#quote">Get a quote ↗</a><a className="text-link" href="/paint-correction">Explore paint correction →</a></div></div></section>
         {pricing}{process}
@@ -273,7 +296,7 @@ export default function Site({ page = "home" }: { page?: string }) {
           <div><p className="eyebrow">Online booking</p><h2>Choose a time.<br />We&apos;ll come to you.</h2></div>
           <p>Three simple steps. Select your service, choose your preferred appointment, and tell us where the vehicle is located.</p>
         </div>
-        <div className="booking-shell">
+        {!bookingStatus?.enabled ? <div className="booking-panel"><p>{bookingStatus ? "Online booking is temporarily unavailable. Call or text Camotive to schedule." : "Checking secure booking availability…"}</p><a className="button" href="tel:+12105730671">Call (210) 573-0671</a></div> : <div className="booking-shell">
           <div className="booking-progress">
             {["Select service", "Choose date & time", "Vehicle & contact info"].map((label, index) => (
               <div className={step >= index + 1 ? "done" : ""} key={label}><span>{step > index + 1 ? "✓" : index + 1}</span><small>{label}</small></div>
@@ -316,28 +339,27 @@ export default function Site({ page = "home" }: { page?: string }) {
               <label>Email<input name="email" required type="email" placeholder="you@example.com" /></label>
               <label>Vehicle<input name="vehicle" required placeholder="Year, make & model" /></label>
               <label className="wide">Service address<input name="address" required placeholder="Street address, San Antonio, TX" /></label>
-              <label className="wide">Reminder preference<select name="reminder" defaultValue="text"><option value="text">Text me 24 hours before</option><option value="email">Email me 24 hours before</option><option value="both">Text and email me</option></select></label>
+              <p className="wide">We’ll email your private appointment link. Automatic texts and scheduled reminders are not enabled. One appointment is reserved per day; availability is checked when you submit.</p>
             </div>
+            <BookingChallenge key={challengeVersion} siteKey={bookingStatus.siteKey!} action="booking" onToken={setBotToken} />
             {bookingError && <p className="form-error" role="alert">{bookingError}</p>}
-            <div className="booking-footer"><div><small>{packages[selectedPackage].name} · {vehicleSize} · {formatDate(date)} at {time}</small><strong>${total}+ estimated</strong></div><button className="button" type="submit">Confirm appointment →</button></div>
+            <div className="booking-footer"><div><small>{packages[selectedPackage].name} · {vehicleSize} · {formatDate(date)} at {time}</small><strong>${total}+ estimated</strong></div><button className="button" type="submit" disabled={busy || !botToken}>{busy ? "Saving…" : "Confirm appointment →"}</button></div>
           </form>}
           {step === 4 && booking && <div className="confirmation">
             <div className="checkmark">✓</div><p className="eyebrow">You&apos;re on the calendar</p><h3>Your detail is booked.</h3>
-            <p>{booking.notificationStatus === "sent"
-              ? "A thank-you email and text are on their way. Cam has also been notified of your new appointment."
-              : "Your appointment is saved. Please call or text Camotive to confirm while messaging setup is being completed."}</p>
+            <p>Your appointment is saved. Your private access link and Cam’s notification are queued for email delivery. If the email does not arrive, call Camotive.</p>
             <div className="confirmation-card"><div><small>Confirmation</small><strong>{booking.confirmationCode}</strong></div><div><small>When</small><strong>{formatDate(booking.date)} · {booking.time}</strong></div><div><small>Service</small><strong>{booking.packageName}</strong></div><div><small>Estimate</small><strong>${booking.total}</strong></div></div>
-            <button className="outline-button" onClick={() => { setLookupCode(booking.confirmationCode); scrollTo("appointment"); }}>View my appointment</button>
+            <a className="outline-button" href="/appointment">Request a new private link</a>
           </div>}
-        </div>
+        </div>}
       </section>
 
 </>}
       {page==="appointment" && <>      <section className="appointment section" id="appointment">
-        <div><p className="eyebrow">Already booked?</p><h2>Find your appointment.</h2><p>Enter the confirmation code from your booking to see the service, date, time, and reminder preference.</p></div>
-        <form onSubmit={lookupAppointment}><label>Confirmation code<input value={lookupCode} onChange={(event) => setLookupCode(event.target.value.toUpperCase())} placeholder="CAM-123456" required /></label><button className="button">View appointment →</button></form>
+        <div><p className="eyebrow">Already booked?</p><h2>Find your appointment.</h2><p>Open the private link in your email, or request another using your reference and booking email. For older six-character references, call Camotive.</p></div>
+        {bookingStatus?.enabled ? <form onSubmit={lookupAppointment}><label>Confirmation code<input maxLength={16} value={lookupCode} onChange={(event) => setLookupCode(event.target.value.toUpperCase())} placeholder="CAM-123456ABCDEF" required /></label><label>Booking email<input type="email" maxLength={254} value={lookupEmail} onChange={event => setLookupEmail(event.target.value)} required /></label><BookingChallenge key={challengeVersion} siteKey={bookingStatus.siteKey!} action="recovery" onToken={setBotToken} /><button className="button" disabled={busy || !botToken}>{busy ? "Requesting…" : "Email my private link →"}</button></form> : <p>For appointment help, <a href="tel:+12105730671">call (210) 573-0671</a>.</p>}
         {lookupError && <p className="lookup-error" role="status">{lookupError}</p>}
-        {lookupResult && <div className="lookup-card"><span>✓</span><div><small>{lookupResult.package_name}</small><strong>{formatDate(lookupResult.date)} · {lookupResult.time}</strong><p>{lookupResult.vehicle} · {lookupResult.address}</p></div></div>}
+        {lookupResult && <div className="lookup-card"><span>✓</span><div><small>{lookupResult.package_name}</small><strong>{formatDate(lookupResult.date)} · {lookupResult.time}</strong><p>{lookupResult.vehicle} · Estimate: ${lookupResult.total}</p></div></div>}
       </section>
 
 </>}
