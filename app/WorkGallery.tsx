@@ -3,6 +3,10 @@
 import { useState } from "react";
 
 const photos = [
+  ["mach-e-front", "Mustang Mach-E GT after ceramic coating", "Coating"],
+  ["mach-e-side", "Mustang Mach-E GT coated profile", "Coating"],
+  ["maverick-front", "Ford Maverick after ceramic coating", "Coating"],
+  ["mercedes-cla-rear", "Mercedes-Benz CLA after ceramic coating", "Coating"],
   ["mclaren-hero", "McLaren exterior with dihedral door raised", "Exterior"],
   ["mclaren-interior", "McLaren red leather and Alcantara interior", "Interior"],
   ["mclaren-front", "McLaren front exterior finish", "Exterior"],
@@ -25,10 +29,10 @@ const photos = [
 export default function WorkGallery() {
   const [filter, setFilter] = useState("All");
   return <section className="section work-gallery">
-    <div className="gallery-heading"><div><p className="eyebrow">Our work</p><h2>Care you can see.</h2></div><div className="gallery-filters" role="group" aria-label="Filter project photos">{["All", "Exterior", "Interior"].map(label => <button type="button" key={label} aria-pressed={filter === label} onClick={() => setFilter(label)}>{label}</button>)}</div></div>
+    <div className="gallery-heading"><div><p className="eyebrow">Our work</p><h2>Care you can see.</h2></div><div className="gallery-filters" role="group" aria-label="Filter project photos">{["All", "Exterior", "Interior", "Coating"].map(label => <button type="button" key={label} aria-pressed={filter === label} onClick={() => setFilter(label)}>{label}</button>)}</div></div>
     <div className="photo-grid">{photos.filter(photo => filter === "All" || photo[2] === filter).map(([file, caption]) => <figure key={file}><a href={`/work/${file}.jpg`} target="_blank" rel="noopener noreferrer" aria-label={`View full photo: ${caption} (opens in a new tab)`}><img src={`/work/${file}.jpg`} alt={caption} width="1200" height="1600" loading="lazy" decoding="async"/></a><figcaption>{caption}</figcaption></figure>)}</div>
-    <div className="section-heading centered video-heading"><p className="eyebrow">In motion</p><h2>A closer look.</h2><p>Around the Lamborghini during its foam wash.</p></div>
-    <div className="work-videos">{[["detail-2282", "Lamborghini foam wash — front view"], ["detail-2278", "Lamborghini foam wash — walkaround"]].map(([file, caption]) => <figure key={file}><video controls playsInline preload="none" poster={`/work/${file}.jpg`} aria-label={caption}><source src={`/work/${file}.mp4`} type="video/mp4"/>Your browser does not support video. <a href={`/work/${file}.mp4`}>Open the video</a>.</video><figcaption>{caption}</figcaption></figure>)}</div>
+    <div className="section-heading centered video-heading"><p className="eyebrow">In motion</p><h2>A closer look.</h2><p>Ceramic and glass coating, and a Lamborghini foam wash, up close.</p></div>
+    <div className="work-videos">{[["mach-e-ceramic", "Mustang Mach-E GT — ceramic coating walk-around"], ["glass-coating", "Glass coating application"], ["detail-2282", "Lamborghini foam wash — front view"], ["detail-2278", "Lamborghini foam wash — walkaround"]].map(([file, caption]) => <figure key={file}><video controls playsInline preload="none" poster={`/work/${file}.jpg`} aria-label={caption}><source src={`/work/${file}.mp4`} type="video/mp4"/>Your browser does not support video. <a href={`/work/${file}.mp4`}>Open the video</a>.</video><figcaption>{caption}</figcaption></figure>)}</div>
     <div className="work-social-links"><a href="https://www.instagram.com/camotivedetailing/" target="_blank" rel="noopener noreferrer">More on Instagram</a><a href="https://www.tiktok.com/@camotivedetailing" target="_blank" rel="noopener noreferrer">Follow on TikTok</a></div>
   </section>;
 }
