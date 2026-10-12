@@ -13,6 +13,7 @@ import QuoteForm from "./QuoteForm";
 import ManageBooking from "./ManageBooking";
 import NextOpening from "./NextOpening";
 import { AfterYouBook, CoatingStory, CorrectionStory, DetailChooser, DetailingStories } from "./ServiceInfo";
+import { googleProfileUrl } from "../lib/links";
 import { depositPercent } from "../lib/booking-catalog";
 
 type PackageId = "full" | "premium" | "maintenance" | "ceramic3" | "ceramic5";
@@ -38,7 +39,6 @@ const addOns = {
   engine: ["Engine bay cleaning", 75],
 } as const;
 
-const googleProfileUrl = "https://www.google.com/search?q=camotive+detailing+san+antonio&ludocid=11765857279964552273";
 const quotePages = ["ceramic-coating", "paint-correction", "quote"];
 
 function formatDate(value: string) {
@@ -130,7 +130,6 @@ export default function Site({ page = "home" }: { page?: string }) {
   ];
   const heroImage: Record<string, [string, string]> = {
     "mobile-detailing": ["/work/lamborghini-foam.jpg", "Lamborghini during a foam wash"],
-    "ceramic-coating": ["/work/mach-e-front.jpg", "Ceramic coated Mustang Mach-E GT with bronze grille"],
     "paint-correction": ["/work/tundra-finish.jpg", "Reflections along a silver Toyota Tundra"],
   };
 
@@ -183,7 +182,7 @@ export default function Site({ page = "home" }: { page?: string }) {
               {menu === "services" && <div className="dropdown-panel" id="service-menu">{navLinks.map(l => <a key={l.href} href={l.href}><strong>{l.title}</strong><small>{l.sub}</small></a>)}</div>}
             </div>
             <a href="/our-work" aria-current={page === "our-work" ? "page" : undefined}>Our Work</a>
-            <a href="/reviews" aria-current={page === "reviews" ? "page" : undefined}>Reviews</a>
+            <a href={googleProfileUrl} target="_blank" rel="noopener noreferrer">Reviews<span className="sr-only"> on Google (opens in a new tab)</span></a>
             <a href="/contact" aria-current={page === "contact" ? "page" : undefined}>Contact</a>
           </nav>
           <div className="header-actions"><button className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>{theme === "dark" ? "☼" : "☾"}</button><a className="header-phone" href="tel:+12105730671">(210) 573-0671</a><a className="button button-small" href="/book">Book a detail</a><button ref={menuButton} className="mobile-toggle" aria-expanded={mobileMenu} aria-controls="mobile-nav" aria-label={mobileMenu ? "Close navigation" : "Open navigation"} onClick={() => setMobileMenu(!mobileMenu)}>{mobileMenu ? "✕" : "☰"}</button></div>
@@ -227,7 +226,7 @@ export default function Site({ page = "home" }: { page?: string }) {
           {lookupResult && <div className="lookup-card"><p className={`status-pill status-${lookupResult.status}`}>{lookupResult.status === "confirmed" ? "Confirmed" : lookupResult.status === "pending" ? "Waiting for confirmation" : lookupResult.status === "declined" ? "Not booked: we couldn't take this time" : lookupResult.status}</p><div><small>{lookupResult.package_name}</small><strong>{formatDate(lookupResult.date)}, {lookupResult.time}</strong><p>{lookupResult.vehicle}. Estimate ${lookupResult.total}.</p></div></div>}
         </section>}
         {(isHome || ["mobile-detailing", "locations"].includes(page) || currentArea) && faq}
-        {page !== "manage" && <section className="final-cta"><img src="/work/mercedes-cla-rear.jpg" alt="" loading="lazy" decoding="async" />
+        {page !== "manage" && <section className="final-cta">{/* The CLA also appears in the gallery and coating showcase; don't show it twice. */}{!["our-work", "ceramic-coating"].includes(page) && <img src="/work/mercedes-cla-rear.jpg" alt="" loading="lazy" decoding="async" />}
           {quoteCta && page !== "quote" ? <><h2>Ready for a quote?</h2><p>Tell us about your vehicle and what you&apos;d like. We reply within one business day.</p><div className="hero-actions"><a className="button" href={`/quote?service=${page === "paint-correction" ? "correction" : "ceramic"}`}>Request a quote</a><a className="outline-button" href="sms:+12105730671">Text us photos</a></div></>
             : <><h2>Ready for your next detail?</h2><p>Pick an open time online and we confirm it by email. Prefer to talk first? Call or text anytime.</p><div className="hero-actions"><a className="button" href="/book">Book a detail</a><a className="outline-button" href="tel:+12105730671">Call (210) 573-0671</a></div></>}
         </section>}
@@ -235,7 +234,7 @@ export default function Site({ page = "home" }: { page?: string }) {
       <footer className="footer"><div className="footer-grid"><div><a className="brand" href="/" aria-label="Camotive Detailing home"><Logo /></a><p>Mobile car detailing anywhere in San Antonio, plus ceramic coating and paint correction by quote.</p><div className="socials"><a href="https://www.instagram.com/camotivedetailing/" target="_blank" rel="noreferrer">Instagram</a><a href="https://www.tiktok.com/@camotivedetailing" target="_blank" rel="noreferrer">TikTok</a></div></div>
         <div><h3>Book</h3><a href="/book">Book a detail</a><a href="/quote">Request a quote</a><a href="/appointment">My appointment</a><a href="tel:+12105730671">(210) 573-0671</a></div>
         <div><h3>Services</h3>{navLinks.map(l => <a key={l.href} href={l.href}>{l.title}</a>)}<a href="/locations">Service area</a></div>
-        <div><h3>Camotive</h3><a href="/our-work">Our Work</a><a href="/reviews">Reviews</a><a href="/contact">Contact</a><a className="footer-rating" href={googleProfileUrl} target="_blank" rel="noreferrer"><span>★★★★★</span><strong>5.0 on Google</strong></a></div></div>
+        <div><h3>Camotive</h3><a href="/our-work">Our Work</a><a href={googleProfileUrl} target="_blank" rel="noopener noreferrer">Reviews<span className="sr-only"> on Google (opens in a new tab)</span></a><a href="/contact">Contact</a><a className="footer-rating" href={googleProfileUrl} target="_blank" rel="noreferrer"><span>★★★★★</span><strong>5.0 on Google</strong></a></div></div>
         <div className="footer-bottom"><p>© {new Date().getFullYear()} Camotive Detailing</p><small>Photos and videos by Camotive Detailing</small></div></footer>
       {page !== "book" && page !== "manage" && <a className="mobile-booking-cta" href={quoteCta ? "/quote" : "/book"}>{quoteCta ? "Request a quote" : "Book a detail"}</a>}
     </main>

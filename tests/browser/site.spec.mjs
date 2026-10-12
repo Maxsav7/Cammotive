@@ -43,6 +43,16 @@ for (const path of pages) {
   });
 }
 
+// Tablet widths sit between the phone and desktop projects, so check the header there directly.
+test("the header fits at every tablet width", async ({ page }) => {
+  await page.goto("/");
+  for (const width of [768, 801, 820, 834, 900, 1024, 1100]) {
+    await page.setViewportSize({ width, height: 1000 });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow, `page scrolls sideways at ${width}px`).toBeLessThanOrEqual(1);
+  }
+});
+
 test("unconfigured booking shows the call/text fallback, never a form", async ({ page }) => {
   await page.goto("/book");
   await expect(page.getByText("Online booking is temporarily unavailable")).toBeVisible();

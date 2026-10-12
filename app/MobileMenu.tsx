@@ -6,6 +6,7 @@
 // motion library; the global reduced-motion rule turns the movement off.
 import { useEffect, useRef, useState, type RefObject } from "react";
 import Logo from "./Logo";
+import { googleProfileUrl } from "../lib/links";
 
 type Link = { href: string; label: string };
 type Group = { id: string; label: string; links: Link[] };
@@ -68,7 +69,7 @@ export default function MobileMenu({ open, onClose, triggerRef, page, groups }: 
           </div>;
         })}
         {item({ href: "/our-work", label: "Our Work" })}
-        {item({ href: "/reviews", label: "Reviews" })}
+        <a href={googleProfileUrl} target="_blank" rel="noopener noreferrer" onClick={onClose}>Reviews<span className="sr-only"> on Google (opens in a new tab)</span></a>
         {item({ href: "/contact", label: "Contact" })}
         {item({ href: "/appointment", label: "My appointment" })}
       </nav>

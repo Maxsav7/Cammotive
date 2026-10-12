@@ -88,6 +88,21 @@ test("gallery exposes 15 distinct photos and four opt-in video players", async (
   }
 });
 
+test("no customer page shows the same photo twice", async () => {
+  for (const route of ["", "mobile-detailing", "ceramic-coating", "paint-correction", "locations", "stone-oak", "our-work", "reviews", "contact", "book", "quote", "appointment"]) {
+    const photos = [...(await html(`/${route}`)).matchAll(/src="\/work\/([a-z0-9-]+)\.jpg"/g)].map(m => m[1]);
+    const repeated = photos.filter((photo, i) => photos.indexOf(photo) !== i);
+    assert.deepEqual(repeated, [], `/${route} repeats ${repeated}`);
+  }
+});
+
+test("Reviews in the navigation goes straight to the Google profile", async () => {
+  const page = await html("/");
+  const reviewLinks = [...page.matchAll(/<a[^>]*href="([^"]*)"[^>]*>Reviews(?:<span[^>]*>[^<]*<\/span>)?<\/a>/g)].map(m => m[1]);
+  assert.ok(reviewLinks.length >= 2, `expected header and footer Reviews links, found ${reviewLinks.length}`);
+  for (const href of reviewLinks) assert.match(href, /ludocid=11765857279964552273/, `Reviews link points to ${href}`);
+});
+
 test("Google links open the profile without a forced review form", async () => {
   const page = await html("/reviews");
   assert.match(page, /ludocid=11765857279964552273/);
