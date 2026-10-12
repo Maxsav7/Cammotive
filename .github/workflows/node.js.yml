@@ -45,6 +45,8 @@ jobs:
     - run: npm run test:security
     - run: npm test
     - run: npm run test:vercel
+    - name: Local dev server (Turbopack) serves every page and icon
+      run: npm run test:dev
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15

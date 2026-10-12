@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.next.json",
     "db:check": "drizzle-kit generate && git diff --exit-code -- drizzle && test -z \"$(git status --porcelain -- drizzle)\"",
     "test:browser": "npm run build:vercel && playwright test",
-    "security:audit": "node scripts/audit.mjs"
+    "security:audit": "node scripts/audit.mjs",
+    "test:dev": "node scripts/dev-smoke.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",
