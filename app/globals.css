@@ -287,8 +287,14 @@ p { text-wrap: pretty; }
 /* ---------- Inner pages ---------- */
 .inner-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 64px; align-items: center; padding: 72px var(--gutter) 96px; border-bottom: 1px solid var(--line); }
 .inner-hero:not(:has(> img)) { grid-template-columns: 1fr; }
-.breadcrumb { display: inline-block; margin-bottom: 30px; font-size: 14px; color: var(--muted); }
-.breadcrumb:hover { color: var(--text); }
+.breadcrumb { margin-bottom: 30px; font-size: 14px; line-height: 1.4; color: var(--muted); }
+.breadcrumb ol { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0; padding: 0; list-style: none; }
+.breadcrumb li { display: inline-flex; align-items: center; gap: 12px; }
+/* Thin chevron between steps, drawn in CSS so it matches the text weight. */
+.breadcrumb li + li::before { content: ""; width: 5px; height: 5px; margin-left: -3px; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); opacity: .55; }
+.breadcrumb a { transition: color .2s; }
+.breadcrumb a:hover { color: var(--text); }
+.breadcrumb [aria-current="page"] { color: var(--text); font-weight: 500; }
 .inner-hero h1 { font-size: clamp(40px, 5vw, 72px); max-width: 12em; margin-bottom: 22px; }
 .inner-hero-copy > p:not(.eyebrow) { max-width: 34em; font-size: 19px; line-height: 1.6; color: var(--muted); margin-bottom: 34px; }
 .inner-hero > img { width: 100%; aspect-ratio: 4 / 5; max-height: 600px; object-fit: cover; border-radius: 24px; }

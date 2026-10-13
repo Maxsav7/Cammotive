@@ -123,6 +123,13 @@ export default function Site({ page = "home" }: { page?: string }) {
     appointment: ["Your detail, at a glance.", "Open the private link from your email, or request a new one."],
   };
   const title = currentArea ? [`Mobile detailing in ${currentArea[1]}.`, "Professional interior and exterior care at your home or workplace, plus ceramic protection and paint correction by quote."] : titles[page];
+  // Breadcrumb trail after "Home": the current page, or Service area > neighborhood.
+  const pageNames: Record<string, string> = {
+    "mobile-detailing": "Detailing", "ceramic-coating": "Ceramic Coating", "paint-correction": "Paint Correction",
+    locations: "Service area", "our-work": "Our Work", reviews: "Reviews", contact: "Contact",
+    book: "Book a detail", quote: "Request a quote", appointment: "My appointment",
+  };
+  const crumbs: [string, string?][] = currentArea ? [["Service area", "/locations"], [currentArea[1]]] : [[pageNames[page] ?? ""]];
   const navLinks = [
     { href: "/mobile-detailing", title: "Detailing", sub: "Book online, we come to you" },
     { href: "/ceramic-coating", title: "Ceramic Coating", sub: "Long-term protection, by quote" },
@@ -203,7 +210,7 @@ export default function Site({ page = "home" }: { page?: string }) {
           <section className="section convenience"><div className="section-heading"><p className="eyebrow">We come to you</p><h2>Your schedule. Your location.</h2><p>Detailing that works around your day, anywhere in San Antonio.</p></div><div className="convenience-grid">{[["Home", "Get a detail without leaving your driveway."], ["Workplace", "We work on your car while you work."], ["Apartment", "Arrange access and property permission in advance."], ["Somewhere else", "Tell us where the car is and we'll confirm the spot works."]].map(([name, desc]) => <a href="/book" key={name}><div><h3>{name}</h3><p>{desc}</p></div></a>)}</div></section>
           {pricing}
           <AfterYouBook />
-        </> : page === "manage" ? null : <section className="inner-hero"><div className="inner-hero-copy"><a className="breadcrumb" href="/">Home /</a><h1>{title?.[0]}</h1><p>{title?.[1]}</p>
+        </> : page === "manage" ? null : <section className="inner-hero"><div className="inner-hero-copy"><nav className="breadcrumb" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li>{crumbs.map(([label, href]) => <li key={label}>{href ? <a href={href}>{label}</a> : <span aria-current="page">{label}</span>}</li>)}</ol></nav><h1>{title?.[0]}</h1><p>{title?.[1]}</p>
           {!["book", "appointment", "quote"].includes(page) && <div className="hero-actions">{page === "reviews" ? <><a className="button" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Read our Google reviews (opens in a new tab)">Read our Google reviews</a><a className="outline-button" href="/book">Book a detail</a></>
             : <>{quoteCta ? <a className="button" href={`/quote?service=${page === "paint-correction" ? "correction" : "ceramic"}`}>Request a quote</a> : <a className="button" href="/book">Book a detail</a>}<a className="outline-button" href="tel:+12105730671">Call (210) 573-0671</a></>}</div>}</div>
           {heroImage[page] && <img src={heroImage[page][0]} alt={heroImage[page][1]} />}</section>}
