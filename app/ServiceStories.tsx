@@ -1,84 +1,58 @@
 import Link from "next/link";
 import styles from "./ServiceStories.module.css";
 
-function Photo({ file, alt, label, caption }: { file: string; alt: string; label: string; caption: string }) {
+// The homepage overview of what Camotive does. One photo per service, each used
+// only once on the page, and plain descriptions written as the team ("we").
+function Photo({ file, alt }: { file: string; alt: string }) {
   return <figure className={styles.photo}>
     <img src={`/work/${file}.jpg`} alt={alt} width={1200} height={1600} loading="lazy" decoding="async" />
-    <figcaption><span>{label}</span>{caption}</figcaption>
   </figure>;
 }
+
+const services = [
+  {
+    id: "exterior", eyebrow: "Exterior detailing", title: "A proper hand wash, inside the details.",
+    text: "We hand wash the paint, clean the wheels, tires and trim, and finish the glass, so the car looks cared for from every angle, not just from the driveway.",
+    photo: "bmw-foam", alt: "BMW covered in wash foam during an exterior detail",
+    action: <Link className="button" href="/book?service=full">Book a Full Detail</Link>,
+  },
+  {
+    id: "interior", eyebrow: "Interior detailing", title: "A cabin that feels new again.",
+    text: "Seats, carpets, mats, vents and touch points are vacuumed, cleaned and protected. For stains, spills or pet hair, the Premium Detail adds shampoo or extraction and leather care.",
+    photo: "mclaren-interior", alt: "McLaren red leather and Alcantara interior after detailing",
+    action: <Link className="button" href="/book?service=premium">Book a Premium Detail</Link>,
+  },
+  {
+    id: "correction", eyebrow: "Paint correction", title: "Swirls and haze, polished out.",
+    text: "When sunlight shows swirls instead of color, washing won't fix it. We machine polish the clear coat to bring back clarity. We look at your paint first and quote what it actually needs.",
+    photo: "tundra-finish", alt: "Reflections along the bed and tailgate of a silver Toyota Tundra",
+    action: <Link className="button" href="/quote?service=correction">Request a quote</Link>,
+  },
+  {
+    id: "coating", eyebrow: "Ceramic coating", title: "Protection that lasts for years.",
+    text: "A ceramic coating bonds to the paint and adds a hard, glossy layer that sheds water and makes every wash easier. Choose a 3-year or 5-year coating, quoted after we see the car.",
+    photo: "mach-e-front", alt: "Ceramic coated Mustang Mach-E GT",
+    action: <Link className="button" href="/ceramic-coating">About ceramic coating</Link>,
+  },
+];
 
 export default function ServiceStories() {
   return <section className={`section ${styles.stories}`} id="services" aria-labelledby="services-heading">
     <header className={styles.intro}>
-      <div><p className="eyebrow">What we do</p><h2 id="services-heading">Picture your car<br />feeling like this.</h2></div>
-      <p>The dust on the drive home. The mess in the back seat. The finish you wish would shine again. Start with what you want to change—we’ll help you get there.</p>
+      <div><p className="eyebrow">What we do</p><h2 id="services-heading">Detailing, correction<br />and protection.</h2></div>
+      <p>We&apos;re a mobile detailing team serving all of San Antonio. Detailing is booked online. Paint correction and ceramic coating are quoted first, because every finish is different.</p>
     </header>
-    <nav className={styles.index} aria-label="Explore service stories">
-      <a href="#story-exterior">Exterior</a><a href="#story-interior">Interior</a><a href="#story-correction">Paint correction</a><a href="#story-coating">Ceramic coating</a><a href="#story-tint">Window tint</a>
+    <nav className={styles.index} aria-label="Our services">
+      {services.map(s => <a key={s.id} href={`#story-${s.id}`}>{s.eyebrow}</a>)}
     </nav>
-
-    <article id="story-exterior" className={styles.story} aria-labelledby="exterior-heading">
+    {services.map((s, i) => <article key={s.id} id={`story-${s.id}`} className={`${styles.story} ${i % 2 ? styles.reverse : ""}`} aria-labelledby={`${s.id}-heading`}>
       <div className={styles.copy}>
-        <p className="eyebrow">Exterior detailing</p>
-        <h3 id="exterior-heading">Under the road grime,<br />it’s still your pride and joy.</h3>
-        <p>Between bugs, dust and everyday miles, that just-washed feeling disappears fast. We carefully wash the exterior and work through the wheels, trim and finishing touches. The result is a car you want to look back at when you park—not another job on your weekend list.</p>
-        <Link className="button" href="/book?service=full">Book a Full Detail</Link>
-        <p className={styles.note}>In the photos: a McLaren during its wash and its finished exterior.</p>
+        <p className="eyebrow">{s.eyebrow}</p>
+        <h3 id={`${s.id}-heading`}>{s.title}</h3>
+        <p>{s.text}</p>
+        {s.action}
       </div>
-      <div className={styles.pair}>
-        <Photo file="mclaren-rear" alt="Water and wash foam on the rear of a black McLaren" label="During the wash" caption="Care reaches beyond the panels you see first." />
-        <Photo file="mclaren-front" alt="Front view of the black McLaren with a reflective finish" label="The finished detail" caption="A clean finish worth a second look." />
-      </div>
-      <details className={styles.film}>
-        <summary>See the care in motion <span>Lamborghini foam-wash film · tap to open</span></summary>
-        <figure><video controls playsInline preload="none" poster="/work/detail-2282.jpg" aria-label="Lamborghini during its foam wash"><source src="/work/detail-2282.mp4" type="video/mp4" /><a href="/work/detail-2282.mp4">Watch the foam-wash video</a></video><figcaption>A separate customer vehicle, filmed during its foam wash. No finished-result comparison is implied.</figcaption></figure>
-      </details>
-    </article>
-
-    <article id="story-interior" className={`${styles.story} ${styles.reverse}`} aria-labelledby="interior-heading">
-      <div className={styles.copy}>
-        <p className="eyebrow">Interior detailing</p>
-        <h3 id="interior-heading">Open the door.<br />Leave the day’s mess behind.</h3>
-        <p>Your car carries the school runs, workdays and everything in between. We focus on the places that collect it all: floor mats, seats, touch points and those easy-to-miss corners. A freshly detailed cabin makes the next drive feel like a reset, without you spending your afternoon cleaning it.</p>
-        <Link className="button" href="/book?service=premium">Book an interior refresh</Link>
-        <p className={styles.note}>A closer look at this Tundra’s detailed cabin—not a staged before-and-after.</p>
-      </div>
-      <div className={styles.pair}>
-        <Photo file="tundra-driver-floor" alt="Detailed Toyota Tundra driver footwell, carpet and rubber mat" label="The little things" caption="The floor beneath your feet deserves attention, too." />
-        <Photo file="tundra-cabin" alt="Toyota Tundra front seats and dashboard after detailing" label="The bigger picture" caption="A cabin ready for the next part of your day." />
-      </div>
-    </article>
-
-    <article id="story-correction" className={styles.story} aria-labelledby="correction-heading">
-      <div className={styles.copy}>
-        <p className="eyebrow">Paint correction</p>
-        <h3 id="correction-heading">When a wash can’t<br />bring the shine back.</h3>
-        <p>If sunlight brings out swirls instead of the color you love, another wash won’t solve it. We assess your paint, then recommend a polishing approach to reduce suitable surface imperfections and bring back clarity. You get a finish you can feel proud of, with an honest conversation about what can—and can’t—be improved.</p>
-        <Link className="button" href="/quote?service=correction">Request a paint assessment</Link>
-      </div>
-      <div className={styles.single}>
-        <Photo file="tundra-finish" alt="Reflections on the silver Toyota Tundra bed and tailgate" label="Look at the reflections" caption="Camotive’s Tundra detail. A finish reference, not a documented paint-correction result." />
-      </div>
-    </article>
-
-    <article id="story-coating" className={`${styles.story} ${styles.reverse}`} aria-labelledby="coating-heading">
-      <div className={styles.copy}>
-        <p className="eyebrow">Ceramic coating</p>
-        <h3 id="coating-heading">Love the finish.<br />Make it easier to keep.</h3>
-        <p>Texas roads don’t give your paint much of a break. We prepare the surface and apply a ceramic coating suited to your vehicle, adding gloss and a protective layer that makes routine washing easier. You spend less time fighting stuck-on grime and more time enjoying the car you chose—regular care still matters.</p>
-        <Link className="button" href="/ceramic-coating">How ceramic coating works</Link>
-        <p className={styles.note}>Paint correction is assessed and quoted separately.</p>
-      </div>
-      <div className={styles.single}>
-        <Photo file="mclaren-hero" alt="Black McLaren with its door raised and reflections along its bodywork" label="A finish worth caring for" caption="A customer McLaren from our detail portfolio; coating treatment is not documented for this photo." />
-      </div>
-    </article>
-
-    <aside id="story-tint" className={styles.tint} aria-labelledby="tint-heading">
-      <div><p className="eyebrow">Thinking about window tint?</p><h3 id="tint-heading">Start with how you want<br />your cabin to feel.</h3></div>
-      <div><p>Looking for more privacy or less glare? Tell Cam what you drive and what you’d like to change. Ask about availability and a real before-and-after example before choosing your next step.</p><Link className="text-link" href="/quote?service=tint">Request a tint quote</Link></div>
-    </aside>
-    <footer className={styles.end}><p>Your car doesn’t have to look like these to deserve this care.</p><Link className="text-link" href="/book">Book a detail</Link></footer>
+      <div className={styles.single}><Photo file={s.photo} alt={s.alt} /></div>
+    </article>)}
   </section>;
 }

@@ -5,7 +5,7 @@ import { failure, HttpError, json, readJson, token, verifyBot } from "@/lib/book
 import { emailJobs, sendQueuedEmailsSoon } from "@/lib/booking-outbox";
 import { camQuoteEmail, quoteReceivedEmail } from "@/lib/booking-emails";
 
-// Ceramic coating, paint correction and tint are quoted by Cam before booking.
+// Ceramic coating and paint correction are quoted before booking.
 // Nothing is stored except the encrypted emails in the outbox (erased once sent).
 export async function POST(request: Request) {
   try {
@@ -21,6 +21,6 @@ export async function POST(request: Request) {
     const details = { ...quote, service: quoteServices[quote.service] };
     await (await emailJobs(null, [[`${reference}-cam`, camQuoteEmail(reference, details)], [`${reference}-ack`, quoteReceivedEmail(reference, details)]])).run();
     sendQueuedEmailsSoon();
-    return json({ reference, message: "Request received. Cam will reply within one business day." }, 201);
+    return json({ reference, message: "Request received. We'll reply within one business day." }, 201);
   } catch (error) { return failure(error); }
 }

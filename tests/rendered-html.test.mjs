@@ -59,30 +59,49 @@ test("all supported customer pages render", async () => {
   }
 });
 
-test("services tell visual stories without inventing treatment results", async () => {
+test("services are described plainly, as a team, with no tint and no repeated photos", async () => {
   const page = await html("/");
-  for (const id of ["story-exterior", "story-interior", "story-correction", "story-coating", "story-tint"]) {
+  for (const id of ["story-exterior", "story-interior", "story-correction", "story-coating"]) {
     assert.match(page, new RegExp(`id="${id}"`));
     assert.match(page, new RegExp(`href="#${id}"`));
   }
-  assert.match(page, /During the wash/);
-  assert.match(page, /not a documented paint-correction result/);
-  assert.match(page, /coating treatment is not documented/);
-  assert.match(page, /Window tint/);
-  assert.match(page, /preload="none"/);
-  assert.doesNotMatch(page, /<video[^>]*autoplay/i);
+  assert.doesNotMatch(page, /tint/i);
+  const photos = [...page.matchAll(/src="\/work\/([a-z0-9-]+)\.jpg"/g)].map(m => m[1]);
+  assert.equal(new Set(photos).size, photos.length, `repeated photo on the homepage: ${photos}`);
 });
 
-test("gallery exposes 21 photos and four opt-in video players", async () => {
+test("customer-facing pages never name an individual", async () => {
+  for (const route of ["", "mobile-detailing", "ceramic-coating", "paint-correction", "book", "quote", "contact", "reviews", "appointment", "locations"]) {
+    assert.doesNotMatch(await html(`/${route}`), /\bCam\b/, `/${route} mentions Cam`);
+  }
+});
+
+test("gallery exposes 15 distinct photos and three opt-in video players, one Lamborghini foam wash", async () => {
   const page = await html("/our-work");
-  assert.equal((page.match(/aria-label="View full photo:/g) ?? []).length, 21);
-  assert.equal((page.match(/<video\b/g) ?? []).length, 4);
+  assert.equal((page.match(/aria-label="View full photo:/g) ?? []).length, 15);
+  assert.equal((page.match(/<video\b/g) ?? []).length, 3);
+  assert.equal((page.match(/<video[^>]*aria-label="Lamborghini/g) ?? []).length, 1);
   assert.doesNotMatch(page, /<video[^>]*autoplay/i);
   for (const path of ["mclaren-hero.jpg", "mclaren-interior.jpg", "detail-2282.mp4", "detail-2278.mp4", "mach-e-front.jpg", "mach-e-ceramic.mp4", "glass-coating.mp4"]) {
     const response = await fetch(`${origin}/work/${path}`, { method: "HEAD" });
     assert.equal(response.status, 200, path);
     assert.match(response.headers.get("content-type") ?? "", /image\/jpeg|video\/mp4/);
   }
+});
+
+test("no customer page shows the same photo twice", async () => {
+  for (const route of ["", "mobile-detailing", "ceramic-coating", "paint-correction", "locations", "stone-oak", "our-work", "reviews", "contact", "book", "quote", "appointment"]) {
+    const photos = [...(await html(`/${route}`)).matchAll(/src="\/work\/([a-z0-9-]+)\.jpg"/g)].map(m => m[1]);
+    const repeated = photos.filter((photo, i) => photos.indexOf(photo) !== i);
+    assert.deepEqual(repeated, [], `/${route} repeats ${repeated}`);
+  }
+});
+
+test("Reviews in the navigation goes straight to the Google profile", async () => {
+  const page = await html("/");
+  const reviewLinks = [...page.matchAll(/<a[^>]*href="([^"]*)"[^>]*>Reviews(?:<span[^>]*>[^<]*<\/span>)?<\/a>/g)].map(m => m[1]);
+  assert.ok(reviewLinks.length >= 2, `expected header and footer Reviews links, found ${reviewLinks.length}`);
+  for (const href of reviewLinks) assert.match(href, /ludocid=11765857279964552273/, `Reviews link points to ${href}`);
 });
 
 test("Google links open the profile without a forced review form", async () => {

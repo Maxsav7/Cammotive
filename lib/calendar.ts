@@ -36,7 +36,7 @@ export function appointmentIcs({ code, date, time, service, address }: { code: s
     `DTEND:${stamp(end)}`,
     `SUMMARY:${escape(`Camotive mobile detail: ${service}`)}`,
     `LOCATION:${escape(address)}`,
-    `DESCRIPTION:${escape(`Reference ${code}. Cam arrives at ${time}. Please have water and power within reach. A 10% deposit is collected on site before work begins. Questions: (210) 573-0671.`)}`,
+    `DESCRIPTION:${escape(`Reference ${code}. We arrive at ${time}. Please have water and power within reach. A 10% deposit is collected on site before work begins. Questions: (210) 573-0671.`)}`,
     "BEGIN:VALARM", "TRIGGER:-P1D", "ACTION:DISPLAY", "DESCRIPTION:Camotive detail tomorrow", "END:VALARM",
     "END:VEVENT", "END:VCALENDAR",
   ];

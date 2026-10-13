@@ -1,6 +1,6 @@
 "use client";
 // Quote requests for work Cam assesses first (ceramic coating, paint correction,
-// tint). Without the online system configured it still works: the details are
+// anything else). Without the online system configured it still works: the details are
 // composed into a text message to Cam.
 import { FormEvent, useEffect, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
@@ -46,8 +46,8 @@ export default function QuoteForm() {
 
   if (sent) return <div className="quote-done" role="status">
     <p className="eyebrow">Request received</p>
-    <h3>Cam will reply within one business day.</h3>
-    <p>Reference {sent}. We&apos;ve emailed you a copy. Photos help Cam quote accurately: text a few clear daylight photos of the vehicle to <a className="text-link" href="sms:+12105730671">{PHONE}</a>.</p>
+    <h3>We&apos;ll reply within one business day.</h3>
+    <p>Reference {sent}. We&apos;ve emailed you a copy. Photos help us quote accurately: text a few clear daylight photos of the vehicle to <a className="text-link" href="sms:+12105730671">{PHONE}</a>.</p>
   </div>;
 
   return <form className="quote-form" onSubmit={submit}>
@@ -60,13 +60,13 @@ export default function QuoteForm() {
       <label>Mobile number<input required type="tel" autoComplete="tel" value={form.phone} onChange={set("phone")} placeholder="(210) 555-0123" /></label>
       <label>Email<input required type="email" autoComplete="email" maxLength={254} value={form.email} onChange={set("email")} /></label>
       <label><span>Preferred timing <span className="optional">Optional</span></span><input maxLength={200} value={form.timing} onChange={set("timing")} placeholder="For example: weekends in November" /></label>
-      <label className="wide"><span>Anything Cam should know? <span className="optional">Optional</span></span><textarea rows={4} maxLength={1500} value={form.notes} onChange={set("notes")} placeholder="Paint condition, swirls or scratches you've noticed, where the car is parked" /></label>
+      <label className="wide"><span>Anything we should know? <span className="optional">Optional</span></span><textarea rows={4} maxLength={1500} value={form.notes} onChange={set("notes")} placeholder="Paint condition, swirls or scratches you've noticed, where the car is parked" /></label>
     </div>
     {status?.enabled && <BookingChallenge key={challenge} siteKey={status.siteKey!} action="quote" onToken={setBotToken} />}
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="quote-actions">
       <button className="button" type="submit" disabled={status === null || (status.enabled && (busy || !botToken))}>{status && !status.enabled ? "Send by text message" : busy ? "Sending…" : "Request a quote"}</button>
-      <p>Cam replies within one business day. Photos help: you&apos;ll be able to text them after sending.</p>
+      <p>We reply within one business day. Photos help: you&apos;ll be able to text them after sending.</p>
     </div>
   </form>;
 }

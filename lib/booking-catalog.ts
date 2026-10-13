@@ -19,7 +19,6 @@ export const bookablePackages = ["full", "premium", "maintenance"] as const;
 export const quoteServices = {
   ceramic: "Ceramic coating",
   correction: "Paint correction",
-  tint: "Window tint",
   other: "Something else",
 } as const;
 export const depositPercent = 10;
