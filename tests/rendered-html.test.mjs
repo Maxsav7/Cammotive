@@ -110,6 +110,19 @@ test("Google links open the profile without a forced review form", async () => {
   assert.doesNotMatch(page, /writereview|review\/create|elfsightcdn/);
 });
 
+test("inner pages show a breadcrumb trail naming the current page", async () => {
+  const expected = { "our-work": ["Our Work"], "ceramic-coating": ["Ceramic Coating"], contact: ["Contact"], "stone-oak": ["Service area", "Stone Oak"] };
+  for (const [route, trail] of Object.entries(expected)) {
+    const page = await html(`/${route}`);
+    const nav = page.match(/<nav[^>]*aria-label="Breadcrumb"[^>]*>([\s\S]*?)<\/nav>/)?.[1];
+    assert.ok(nav, `/${route} has no breadcrumb`);
+    assert.match(nav, /href="\/"[^>]*>Home</);
+    assert.match(nav, new RegExp(`aria-current="page"[^>]*>${trail.at(-1)}<`));
+    if (trail.length > 1) assert.match(nav, new RegExp(`href="/locations"[^>]*>${trail[0]}<`));
+    assert.doesNotMatch(page, />Home \/</);
+  }
+});
+
 test("unknown pages return 404", async () => {
   assert.equal((await fetch(`${origin}/not-a-camotive-page`)).status, 404);
 });
