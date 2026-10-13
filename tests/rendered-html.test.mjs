@@ -76,10 +76,11 @@ test("customer-facing pages never name an individual", async () => {
   }
 });
 
-test("gallery exposes 15 distinct photos and four opt-in video players", async () => {
+test("gallery exposes 15 distinct photos and three opt-in video players, one Lamborghini foam wash", async () => {
   const page = await html("/our-work");
   assert.equal((page.match(/aria-label="View full photo:/g) ?? []).length, 15);
-  assert.equal((page.match(/<video\b/g) ?? []).length, 4);
+  assert.equal((page.match(/<video\b/g) ?? []).length, 3);
+  assert.equal((page.match(/<video[^>]*aria-label="Lamborghini/g) ?? []).length, 1);
   assert.doesNotMatch(page, /<video[^>]*autoplay/i);
   for (const path of ["mclaren-hero.jpg", "mclaren-interior.jpg", "detail-2282.mp4", "detail-2278.mp4", "mach-e-front.jpg", "mach-e-ceramic.mp4", "glass-coating.mp4"]) {
     const response = await fetch(`${origin}/work/${path}`, { method: "HEAD" });

@@ -395,7 +395,7 @@ p { text-wrap: pretty; }
 .photo-grid a:hover img { transform: scale(1.03); }
 .photo-grid figcaption, .work-videos figcaption { padding-top: 12px; font-size: 14px; line-height: 1.5; color: var(--muted); }
 .video-heading { margin-top: 112px; }
-.work-videos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.work-videos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; max-width: 900px; }
 .work-videos video { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; background: #08080a; border-radius: 18px; }
 .work-social-links { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 44px; font-size: 15px; font-weight: 600; }
 .work-social-links a { text-decoration: underline; text-underline-offset: 6px; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
@@ -608,7 +608,7 @@ p { text-wrap: pretty; }
   .convenience-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .price-card { padding: 30px 24px 26px; }
   .showcase-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .work-videos { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 640px; }
+  .work-videos { max-width: 640px; }
 }
 
 @media (max-width: 800px) {
@@ -709,7 +709,9 @@ p { text-wrap: pretty; }
   .faq-list details p { padding-right: 0; }
   .section.compact-reviews { flex-direction: column; align-items: flex-start; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
-  .work-videos { grid-template-columns: 1fr 1fr; gap: 10px; }
+  /* Three tall videos: a swipeable row on phones instead of a 2 + 1 grid. */
+  .work-videos { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; padding-bottom: 4px; }
+  .work-videos figure { flex: 0 0 64%; scroll-snap-align: start; }
   .choice-grid, .size-choice-grid, .addon-grid, .form-grid, .date-layout { grid-template-columns: 1fr; }
   .form-grid .wide { grid-column: auto; }
   .booking-progress { gap: 8px; }
