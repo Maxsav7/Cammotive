@@ -118,7 +118,7 @@ export default function Site({ page = "home" }: { page?: string }) {
     "our-work": ["See the details for yourself.", "Recent Camotive washes, interiors, finished vehicles and ceramic coatings."],
     reviews: ["What our customers say.", "Rated 5.0 on Google. Read what our customers say about their detail."],
     contact: ["Let's talk about your vehicle.", "Questions about a service, your location or your paint? Call or text us directly."],
-    book: ["Book your detail.", "Choose a detail, pick an open time, and send your request. We confirm every booking by email."],
+    book: ["Book your detail.", "Choose a detail and pick an open time. Your booking is confirmed instantly by email."],
     quote: ["Request a quote.", "Ceramic coating and paint correction are quoted after we understand your vehicle. Tell us about it and we'll reply within one business day."],
     appointment: ["Your detail, at a glance.", "Open the private link from your email, or request a new one."],
   };
@@ -166,7 +166,7 @@ export default function Site({ page = "home" }: { page?: string }) {
   const faq = <section className="faq section" id="faq">
     <div className="faq-heading"><p className="eyebrow">Before we arrive</p><h2>Good to know.</h2><p>Everything you need before your mobile detail.</p></div>
     <div className="faq-list">
-      <details><summary>How does online booking work?<span>+</span></summary><p>You choose a detail and an open time, and the slot is held for you. We review every request and confirm by email with a calendar invite. You&apos;ll get a reminder the day before.</p></details>
+      <details><summary>How does online booking work?<span>+</span></summary><p>You choose a detail and an open time and book it. It&apos;s confirmed instantly, and the confirmation email includes a calendar invite. You&apos;ll get a reminder the day before.</p></details>
       <details><summary>Is there a deposit?<span>+</span></summary><p>Nothing is charged online. A {depositPercent}% deposit is collected on site before work begins, and the rest when the detail is done.</p></details>
       <details><summary>How long does a Full Detail take?<span>+</span></summary><p>About 3–4 hours. Larger vehicles, add-ons and heavier soiling can take longer; we'll tell you before starting.</p></details>
       <details><summary>Do you need water or electricity?<span>+</span></summary><p>Please have an outdoor water connection and a power outlet within reach of the vehicle. If that isn&apos;t possible, call or text before booking so we can confirm what your location needs.</p></details>
@@ -202,7 +202,7 @@ export default function Site({ page = "home" }: { page?: string }) {
         {isHome ? <>
           <section className="hero" id="home"><img className="hero-photo" src="/work/mclaren-hero.jpg" alt="Black McLaren with its door raised, detailed by Camotive" fetchPriority="high" /><div className="hero-shade" />
             <div className="hero-copy"><p className="hero-location">We come to you, anywhere in San Antonio</p><h1>Mobile car detailing in San Antonio</h1>
-              <p className="hero-lede">Hand detailing at your home or workplace. Pick an open time online and we confirm it by email.</p>
+              <p className="hero-lede">Hand detailing at your home or workplace. Pick an open time online and it&apos;s booked instantly.</p>
               <div className="hero-actions"><a className="button" href="/book">Book a detail</a><NextOpening /></div>
               <p className="hero-quote">Ceramic coating or paint correction? <a href="/quote">Request a quote</a></p>
               <a className="hero-rating" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Rated 5.0 out of 5 — view Camotive on Google (opens in a new tab)"><b className="google-g" aria-hidden="true">G</b><strong>5.0</strong><span aria-hidden="true">★★★★★</span><small>Google reviews</small></a></div></section>
@@ -230,12 +230,12 @@ export default function Site({ page = "home" }: { page?: string }) {
           <div><h2>Find your appointment.</h2><p>Open the private link in your email, or request another using your reference and booking email. For older six-character references, call Camotive.</p></div>
           {bookingStatus?.enabled ? <form onSubmit={lookupAppointment}><label>Reference<input maxLength={16} value={lookupCode} onChange={event => setLookupCode(event.target.value.toUpperCase())} placeholder="CAM-123456ABCDEF" required /></label><label>Booking email<input type="email" maxLength={254} value={lookupEmail} onChange={event => setLookupEmail(event.target.value)} required /></label><BookingChallenge key={challengeVersion} siteKey={bookingStatus.siteKey!} action="recovery" onToken={setBotToken} /><button className="button" disabled={busy || !botToken}>{busy ? "Requesting…" : "Email my private link"}</button></form> : <p>For appointment help, <a className="text-link" href="tel:+12105730671">call (210) 573-0671</a>.</p>}
           {lookupError && <p className="lookup-error" role="status">{lookupError}</p>}
-          {lookupResult && <div className="lookup-card"><p className={`status-pill status-${lookupResult.status}`}>{lookupResult.status === "confirmed" ? "Confirmed" : lookupResult.status === "pending" ? "Waiting for confirmation" : lookupResult.status === "declined" ? "Not booked: we couldn't take this time" : lookupResult.status}</p><div><small>{lookupResult.package_name}</small><strong>{formatDate(lookupResult.date)}, {lookupResult.time}</strong><p>{lookupResult.vehicle}. Estimate ${lookupResult.total}.</p></div></div>}
+          {lookupResult && <div className="lookup-card"><p className={`status-pill status-${lookupResult.status}`}>{lookupResult.status === "confirmed" ? "Confirmed" : lookupResult.status === "pending" ? "Waiting for confirmation" : lookupResult.status === "cancelled" ? "Cancelled" : lookupResult.status === "declined" ? "Not booked: we couldn't take this time" : lookupResult.status}</p><div><small>{lookupResult.package_name}</small><strong>{formatDate(lookupResult.date)}, {lookupResult.time}</strong><p>{lookupResult.vehicle}. Estimate ${lookupResult.total}.</p></div></div>}
         </section>}
         {(isHome || ["mobile-detailing", "locations"].includes(page) || currentArea) && faq}
         {page !== "manage" && <section className="final-cta">{/* The CLA also appears in the gallery and coating showcase; don't show it twice. */}{!["our-work", "ceramic-coating"].includes(page) && <img src="/work/mercedes-cla-rear.jpg" alt="" loading="lazy" decoding="async" />}
           {quoteCta && page !== "quote" ? <><h2>Ready for a quote?</h2><p>Tell us about your vehicle and what you&apos;d like. We reply within one business day.</p><div className="hero-actions"><a className="button" href={`/quote?service=${page === "paint-correction" ? "correction" : "ceramic"}`}>Request a quote</a><a className="outline-button" href="sms:+12105730671">Text us photos</a></div></>
-            : <><h2>Ready for your next detail?</h2><p>Pick an open time online and we confirm it by email. Prefer to talk first? Call or text anytime.</p><div className="hero-actions"><a className="button" href="/book">Book a detail</a><a className="outline-button" href="tel:+12105730671">Call (210) 573-0671</a></div></>}
+            : <><h2>Ready for your next detail?</h2><p>Pick an open time online and it&apos;s booked instantly. Prefer to talk first? Call or text anytime.</p><div className="hero-actions"><a className="button" href="/book">Book a detail</a><a className="outline-button" href="tel:+12105730671">Call (210) 573-0671</a></div></>}
         </section>}
       </div>
       <footer className="footer"><div className="footer-grid"><div><a className="brand" href="/" aria-label="Camotive Detailing home"><Logo /></a><p>Mobile car detailing anywhere in San Antonio, plus ceramic coating and paint correction by quote.</p><div className="socials"><a href="https://www.instagram.com/camotivedetailing/" target="_blank" rel="noreferrer">Instagram</a><a href="https://www.tiktok.com/@camotivedetailing" target="_blank" rel="noreferrer">TikTok</a></div></div>

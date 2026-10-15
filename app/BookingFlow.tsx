@@ -1,7 +1,7 @@
 "use client";
 // Online booking for detailing: choose a service, pick an open slot on the live
-// availability calendar, add details, review, and send the request. The request
-// holds the slot until Cam confirms it, and the customer is told exactly that.
+// availability calendar, add details, review, and book. Open slots are confirmed
+// instantly; the confirmation email carries a calendar invite.
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
 import { prices, extras, bookingTimes, depositPercent } from "../lib/booking-catalog";
@@ -130,8 +130,8 @@ export default function BookingFlow() {
     try {
       const response = await fetch("/api/appointments", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": submission.current.key }, body: JSON.stringify({ ...payload, turnstileToken: botToken }) });
       const result = await response.json();
-      if (response.status === 409 && /requested by someone else/.test(result.error ?? "")) { setTime(""); setError(result.error); go(2); return; }
-      if (!response.ok || !result.confirmationCode) { setError(result.error || `We couldn't send your request. Please call or text ${PHONE}.`); return; }
+      if (response.status === 409 && /just taken/.test(result.error ?? "")) { setTime(""); setError(result.error); go(2); return; }
+      if (!response.ok || !result.confirmationCode) { setError(result.error || `We couldn't book that time. Please call or text ${PHONE}.`); return; }
       setDone({ code: result.confirmationCode, total: result.total });
       requestAnimationFrame(() => top.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch { setError("Connection interrupted. Send again with the same details, or call Camotive."); }
@@ -142,9 +142,9 @@ export default function BookingFlow() {
   if (!status.enabled) return <div className="booking-panel"><p>Online booking is temporarily unavailable. Call or text Camotive to schedule.</p><a className="button" href="tel:+12105730671">Call {PHONE}</a></div>;
 
   if (done) return <div className="booking-shell" ref={top}><div className="booking-done" role="status">
-    <p className="eyebrow">Request received</p>
-    <h3 tabIndex={-1}>Your time is held. We&apos;ll confirm it shortly.</h3>
-    <p>This isn&apos;t a confirmation yet. We&apos;ve emailed you a copy of your request, and you&apos;ll get a second email the moment it&apos;s confirmed.</p>
+    <p className="eyebrow"><span className="status-dot" aria-hidden="true" />Confirmed</p>
+    <h3 tabIndex={-1}>You&apos;re booked.</h3>
+    <p>We&apos;ve emailed your confirmation to {contact.email}, with a calendar invite attached. See you {fmt(date, { weekday: "long" })}.</p>
     <dl className="done-summary">
       <div><dt>Reference</dt><dd>{done.code}</dd></div>
       <div><dt>When</dt><dd>{fmt(date, { weekday: "long", month: "long", day: "numeric" })}, {time}</dd></div>
@@ -152,8 +152,7 @@ export default function BookingFlow() {
       <div><dt>Estimate</dt><dd>${done.total}</dd></div>
     </dl>
     <ol className="after-steps">
-      <li><strong>Now</strong> Your request is in and the slot is held.</li>
-      <li><strong>Shortly</strong> We confirm, and you get a confirmation email with a calendar invite.</li>
+      <li><strong>Now</strong> Your time is booked. Check your inbox for the confirmation and calendar invite.</li>
       <li><strong>Day before</strong> A reminder email with everything you need.</li>
       <li><strong>On the day</strong> We arrive at {time}. A {depositPercent}% deposit is collected before work begins.</li>
     </ol>
@@ -203,12 +202,12 @@ export default function BookingFlow() {
         <label>Vehicle<input name="vehicle" required minLength={3} maxLength={120} value={contact.vehicle} onChange={e => setContact({ ...contact, vehicle: e.target.value })} placeholder="Year, make and model" /></label>
         <label className="wide">Service address<input name="address" autoComplete="street-address" required minLength={8} maxLength={250} value={contact.address} onChange={e => setContact({ ...contact, address: e.target.value })} placeholder="Street address, San Antonio, TX" /></label>
       </div>
-      <div className="booking-footer"><div><small>{prices[pkg].name}, {fmt(date, { month: "short", day: "numeric" })} at {time}</small><strong>${total}</strong></div><button className="button" type="submit">Review request</button></div>
+      <div className="booking-footer"><div><small>{prices[pkg].name}, {fmt(date, { month: "short", day: "numeric" })} at {time}</small><strong>${total}</strong></div><button className="button" type="submit">Review booking</button></div>
     </form>}
 
     {step === 4 && <form className="booking-panel" onSubmit={submit}>
       <button type="button" className="back" onClick={() => go(3)}>Back</button>
-      <h3 tabIndex={-1}>Review your request</h3>
+      <h3 tabIndex={-1}>Review your booking</h3>
       <dl className="review-list">
         <div><dt>Service</dt><dd>{prices[pkg].name}, {size}{addOns.length ? ` + ${addOns.map(id => extras[id][0]).join(", ")}` : ""}</dd><button type="button" className="text-button" onClick={() => go(1)}>Change</button></div>
         <div><dt>When</dt><dd>{fmt(date, { weekday: "long", month: "long", day: "numeric" })}, {time}</dd><button type="button" className="text-button" onClick={() => go(2)}>Change</button></div>
@@ -219,11 +218,11 @@ export default function BookingFlow() {
         <li>Estimate <strong>${total}</strong>. We confirm the final price before starting.</li>
         <li>A <strong>{depositPercent}% deposit</strong> is collected on site before work begins.</li>
         <li>Please have water and a power outlet within reach, and access to the parking spot.</li>
-        <li>This sends a request. Your slot is held until we confirm it by email.</li>
+        <li>Your time is confirmed as soon as you book. Need to change it later? Call or text us.</li>
       </ul>
       <BookingChallenge key={challenge} siteKey={status.siteKey!} action="booking" onToken={setBotToken} />
       {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="booking-footer"><div><small>Estimated total</small><strong>${total}</strong></div><button className="button" type="submit" disabled={busy || !botToken}>{busy ? "Sending…" : "Request this time"}</button></div>
+      <div className="booking-footer"><div><small>Estimated total</small><strong>${total}</strong></div><button className="button" type="submit" disabled={busy || !botToken}>{busy ? "Booking…" : "Book this time"}</button></div>
     </form>}
   </div>;
 }

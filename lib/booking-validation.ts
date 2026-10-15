@@ -38,7 +38,7 @@ export const availabilitySchema = z.object({
 });
 export const decisionSchema = z.object({
   code: z.string().trim().toUpperCase().regex(/^CAM-[A-F0-9]{12}$/),
-  action: z.enum(["view", "approve", "decline"]),
+  action: z.enum(["view", "cancel"]),
 }).strict();
 export const quoteSchema = z.object({
   service: z.enum(Object.keys(quoteServices) as [keyof typeof quoteServices, ...(keyof typeof quoteServices)[]]),

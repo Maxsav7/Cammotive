@@ -24,20 +24,24 @@ export function slotToUtc(date: string, time: Slot) {
 const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 const escape = (v: string) => v.replace(/\\/g, "\\\\").replace(/[;,]/g, m => `\\${m}`).replace(/\r?\n/g, "\\n");
 
-export function appointmentIcs({ code, date, time, service, address }: { code: string; date: string; time: Slot; service: string; address: string }) {
+// A cancelled invite reuses the UID with a higher SEQUENCE, so calendar apps that
+// imported the original can match it and mark that event cancelled.
+export function appointmentIcs({ code, date, time, service, address, cancelled = false }: { code: string; date: string; time: Slot; service: string; address: string; cancelled?: boolean }) {
   const start = slotToUtc(date, time);
   const end = new Date(start.getTime() + slotHours * 3600000);
   const lines = [
-    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Camotive Detailing//Booking//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Camotive Detailing//Booking//EN", "CALSCALE:GREGORIAN", cancelled ? "METHOD:CANCEL" : "METHOD:PUBLISH",
     "BEGIN:VEVENT",
     `UID:${code}@camotive`,
+    `SEQUENCE:${cancelled ? 1 : 0}`,
+    `STATUS:${cancelled ? "CANCELLED" : "CONFIRMED"}`,
     `DTSTAMP:${stamp(new Date())}`,
     `DTSTART:${stamp(start)}`,
     `DTEND:${stamp(end)}`,
-    `SUMMARY:${escape(`Camotive mobile detail: ${service}`)}`,
+    `SUMMARY:${escape(`${cancelled ? "Cancelled: " : ""}Camotive mobile detail: ${service}`)}`,
     `LOCATION:${escape(address)}`,
     `DESCRIPTION:${escape(`Reference ${code}. We arrive at ${time}. Please have water and power within reach. A 10% deposit is collected on site before work begins. Questions: (210) 573-0671.`)}`,
-    "BEGIN:VALARM", "TRIGGER:-P1D", "ACTION:DISPLAY", "DESCRIPTION:Camotive detail tomorrow", "END:VALARM",
+    ...(cancelled ? [] : ["BEGIN:VALARM", "TRIGGER:-P1D", "ACTION:DISPLAY", "DESCRIPTION:Camotive detail tomorrow", "END:VALARM"]),
     "END:VEVENT", "END:VCALENDAR",
   ];
   return lines.join("\r\n") + "\r\n";

@@ -516,6 +516,12 @@ p { text-wrap: pretty; }
 .status-confirmed::before { background: #7bd88f; }
 .status-pending::before { background: #e8c872; }
 .status-declined::before { background: #ff9b8f; }
+.status-cancelled::before { background: #ff9b8f; }
+.booking-done .eyebrow { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-weight: 600; }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; background: #7bd88f; box-shadow: 0 0 0 4px color-mix(in srgb, #7bd88f 18%, transparent); }
+.manage-confirm { display: grid; gap: 16px; padding: 20px; border-radius: 16px; border: 1px solid color-mix(in srgb, #ff9b8f 35%, var(--line)); background: color-mix(in srgb, #ff9b8f 6%, transparent); }
+.manage-confirm p { color: var(--text); max-width: 34em; }
+.button.danger-button { background: #ff9b8f; color: #1a0f0e; }
 .lookup-card { flex-direction: column; }
 .lookup-card .status-pill { align-self: flex-start; }
 
