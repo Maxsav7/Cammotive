@@ -1,13 +1,19 @@
 // End-to-end booking test: the production build runs fully configured, but every
-// third-party service (D1, Turnstile, Resend) is a local fake on loopback.
+// third-party service (D1, Turnstile, Resend, Google Calendar) is a local fake on loopback.
 // Run with: npm run test:e2e  (builds first).
 import { defineConfig, devices } from "@playwright/test";
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 
 const port = 4187;
 const fakes = 4186;
 const launchOptions = process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {};
 const secret = () => randomBytes(32).toString("hex");
+// A throwaway service-account key: the app signs with the private half, the fake
+// Google checks the signature with the public half.
+const google = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
+// Cam is already busy all day the day after tomorrow (Chicago), so both slots must show as taken.
+const busyDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date(Date.now() + 2 * 86400000));
+const busy = [{ start: `${busyDay}T05:00:00Z`, end: `${busyDay}T23:59:00Z` }];
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -21,7 +27,8 @@ export default defineConfig({
     { name: "phone", use: { ...devices["Pixel 7"], launchOptions } },
   ],
   webServer: [
-    { command: "node tests/e2e/fake-providers.mjs", url: `http://127.0.0.1:${fakes}/__health`, reuseExistingServer: false, env: { FAKE_PROVIDER_PORT: String(fakes) } },
+    { command: "node tests/e2e/fake-providers.mjs", url: `http://127.0.0.1:${fakes}/__health`, reuseExistingServer: false,
+      env: { FAKE_PROVIDER_PORT: String(fakes), FAKE_GOOGLE_PUBLIC_KEY: google.publicKey, FAKE_GOOGLE_BUSY: JSON.stringify(busy) } },
     {
       command: `node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port ${port}`,
       url: `http://127.0.0.1:${port}`, reuseExistingServer: false, timeout: 60000,
@@ -31,6 +38,9 @@ export default defineConfig({
         TURNSTILE_SITE_KEY: "test-site-key", TURNSTILE_SECRET_KEY: "test", RESEND_API_KEY: "test",
         BOOKING_FROM_EMAIL: "Camotive <bookings@example.com>", CAM_BOOKING_EMAIL: "cam@example.com",
         BOOKING_ENCRYPTION_KEY: secret(), BOOKING_HASH_SECRET: secret(), BOOKING_CRON_SECRET: secret(),
+        // Stored the way Vercel often keeps it: one line with literal "\n".
+        GOOGLE_SERVICE_ACCOUNT_EMAIL: "camotive@test.iam.gserviceaccount.com", GOOGLE_SERVICE_ACCOUNT_KEY: google.privateKey.replace(/\n/g, "\\n"),
+        GOOGLE_CALENDAR_ID: "cam@example.com",
       },
     },
   ],

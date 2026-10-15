@@ -1,18 +1,21 @@
 import { bookingSchema, estimate } from "@/lib/booking-validation";
 import { db, requireBooking, limitRequest, limit } from "@/lib/booking-store";
 import { digest, failure, HttpError, json, readJson, seal, token, unseal, verifyBot } from "@/lib/booking-security";
-import { emailJobs, sendQueuedEmailsSoon } from "@/lib/booking-outbox";
-import { camRequestEmail, requestReceivedEmail, type BookingDetails } from "@/lib/booking-emails";
+import { emailJobs, sendQueuedEmailsSoon, type OutboxJob } from "@/lib/booking-outbox";
+import { bookedEmail, camBookingEmail, type BookingDetails } from "@/lib/booking-emails";
+import { googleCalendarReady, slotBusyOnCalendar } from "@/lib/google-calendar";
 
-const TAKEN = "That time was just requested by someone else. Please choose another slot.";
+const TAKEN = "That time was just taken. Please choose another slot.";
 
 async function slotTaken(date: string, time: string) {
   return Boolean(await db.prepare(`SELECT 1 AS taken FROM secure_bookings WHERE date = ? AND time = ? AND status IN ('pending', 'confirmed')
     UNION SELECT 1 FROM appointments WHERE date = ?`).bind(date, time, date).first());
 }
 
-// A customer requests a detailing slot. The slot is held as "pending" until Cam
-// approves or declines it; the customer is told so on screen and by email.
+// A customer books an open detailing slot. Bookings are confirmed instantly: the
+// customer gets a confirmation with a calendar invite, Cam gets a notification
+// with a private link to cancel if needed, and (when configured) the booking is
+// added to Cam's Google Calendar. Slots that are busy on that calendar can't be booked.
 export async function POST(request: Request) {
   try {
     requireBooking();
@@ -38,6 +41,7 @@ export async function POST(request: Request) {
       return null;
     };
     if (await slotTaken(details.date, details.time)) { const replay = await replayOrTaken(); if (replay) return replay; throw new HttpError(409, TAKEN); }
+    if (await slotBusyOnCalendar(details.date, details.time)) throw new HttpError(409, TAKEN);
     await verifyBot(turnstileToken, "booking");
     await limit("recipient-email", details.email, 3, 86400);
     await limit("recipient-phone", details.phone, 3, 86400);
@@ -47,20 +51,26 @@ export async function POST(request: Request) {
     const accessToken = token();
     const adminToken = token();
     const record: BookingDetails & Record<string, unknown> = { ...details, ...calculated };
-    const emails = await emailJobs(code, [
-      [`${code}-received`, requestReceivedEmail(code, record, accessToken)],
-      [`${code}-cam`, camRequestEmail(code, record, adminToken)],
-    ]);
+    const jobs: [string, OutboxJob][] = [
+      [`${code}-booked`, bookedEmail(code, record, accessToken)],
+      [`${code}-cam`, camBookingEmail(code, record, adminToken)],
+    ];
+    if (googleCalendarReady()) jobs.push([`${code}-calendar`, { kind: "calendar", op: "create", event: {
+      code, date: details.date, time: details.time, title: `${calculated.packageName}: ${details.name}`, location: details.address,
+      description: [`${calculated.packageName}${calculated.addOns ? ` + ${calculated.addOns}` : ""}`, `Estimate $${calculated.total}`, "",
+        details.name, details.phone, details.email, details.vehicle, "", `Reference ${code}. Booked online at Camotive.`].join("\n"),
+    } }]);
+    const emails = await emailJobs(code, jobs);
     // Two single-statement writes (each atomic) rather than a batch, because the D1
     // REST API used on Vercel doesn't document batches as transactional. If queuing
-    // the emails fails, the hold is released so nobody is left waiting silently.
+    // the notifications fails, the booking is removed so nobody is left unnotified.
     let inserted;
     try {
       inserted = await db.prepare(`INSERT INTO secure_bookings
-        (code, request_key, fingerprint, date, time, status, email_hash, details, token_hash, token_expires, admin_token_hash, created_at, delete_after)
-        SELECT ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM appointments WHERE date = ?) RETURNING code`)
+        (code, request_key, fingerprint, date, time, status, email_hash, details, token_hash, token_expires, admin_token_hash, decided_at, created_at, delete_after)
+        SELECT ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM appointments WHERE date = ?) RETURNING code`)
         .bind(code, requestKey, fingerprint, details.date, details.time, await digest(details.email), await seal(record),
-          await digest(accessToken), now + 86400, await digest(adminToken), now,
+          await digest(accessToken), now + 86400, await digest(adminToken), now, now,
           Math.floor(Date.parse(details.date + "T23:59:59Z") / 1000) + 90 * 86400, details.date).first();
     } catch (error) {
       const replay = await replayOrTaken();
@@ -76,12 +86,12 @@ export async function POST(request: Request) {
       throw error;
     }
     sendQueuedEmailsSoon();
-    return json({ confirmationCode: code, ...calculated, status: "pending", notificationStatus: "queued" }, 201);
+    return json({ confirmationCode: code, ...calculated, status: "confirmed", notificationStatus: "queued" }, 201);
   } catch (error) { return failure(error); }
 }
 
 // The customer's private link (token in the Authorization header) shows the
-// request and its status. Address, email and phone are never returned.
+// booking and its status. Address, email and phone are never returned.
 export async function GET(request: Request) {
   try {
     requireBooking();

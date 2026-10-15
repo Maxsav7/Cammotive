@@ -1,5 +1,6 @@
 "use client";
-// Cam's private page for one booking request, opened from the new-request email.
+// Cam's private page for one booking, opened from the new-booking email. He can
+// see the details and cancel the booking (after a confirm step).
 // The token is in the URL fragment (never sent to servers or logs) and is removed
 // from the address bar immediately.
 import { useEffect, useState } from "react";
@@ -12,8 +13,9 @@ export default function ManageBooking() {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [message, setMessage] = useState("Loading…");
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
-  async function call(action: "view" | "approve" | "decline", a = auth) {
+  async function call(action: "view" | "cancel", a = auth) {
     if (!a) return;
     setBusy(true);
     try {
@@ -21,7 +23,8 @@ export default function ManageBooking() {
       const result = await response.json();
       if (!response.ok) { setMessage(result.error || "Something went wrong."); return; }
       setBooking(result.booking);
-      setMessage(action === "approve" ? "Confirmed. The customer has been emailed a confirmation with a calendar invite." : action === "decline" ? "Declined. The customer has been emailed and the time is open again." : "");
+      setConfirming(false);
+      setMessage(action === "cancel" ? "Cancelled. The customer has been emailed and the time is open again." : "");
     } catch { setMessage("Connection interrupted. Try again."); }
     finally { setBusy(false); }
   }
@@ -37,21 +40,27 @@ export default function ManageBooking() {
   }, []);
 
   return <section className="section manage">
-    <div className="section-heading"><p className="eyebrow">Booking request</p><h1>{booking ? `${booking.packageName}` : "Review request"}</h1></div>
+    <div className="section-heading"><p className="eyebrow">Booking</p><h1>{booking ? `${booking.packageName}` : "Your booking"}</h1></div>
     {booking && <div className="manage-card">
-      <p className={`status-pill status-${booking.status}`}>{booking.status === "pending" ? "Waiting for your decision" : booking.status === "confirmed" ? "Confirmed" : booking.status === "declined" ? "Declined" : booking.status}</p>
+      <p className={`status-pill status-${booking.status}`}>{booking.status === "confirmed" ? "Confirmed" : booking.status === "cancelled" ? "Cancelled" : booking.status === "pending" ? "Waiting for confirmation" : booking.status === "declined" ? "Declined" : booking.status}</p>
       <dl className="review-list">
         <div><dt>When</dt><dd>{fmt(booking.date)}, {booking.time}</dd></div>
         <div><dt>Service</dt><dd>{booking.packageName}{booking.addOns ? ` + ${booking.addOns}` : ""}, estimate ${booking.total}</dd></div>
         <div><dt>Vehicle</dt><dd>{booking.vehicle}</dd></div>
         <div><dt>Address</dt><dd>{booking.address}</dd></div>
-        <div><dt>Customer</dt><dd>{booking.name}<br /><a href={`tel:${booking.phone}`}>{booking.phone}</a> · <a href={`mailto:${booking.email}`}>{booking.email}</a></dd></div>
+        <div><dt>Customer</dt><dd>{booking.name}<br /><a href={`tel:${booking.phone}`}>{booking.phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3")}</a> · <a href={`mailto:${booking.email}`}>{booking.email}</a></dd></div>
         <div><dt>Reference</dt><dd>{booking.code}</dd></div>
       </dl>
-      {booking.status === "pending" && <div className="hero-actions">
-        <button className="button" type="button" disabled={busy} onClick={() => call("approve")}>Confirm this booking</button>
-        <button className="outline-button" type="button" disabled={busy} onClick={() => call("decline")}>Decline and release the time</button>
-      </div>}
+      {(booking.status === "confirmed" || booking.status === "pending") && (confirming
+        ? <div className="manage-confirm" role="group" aria-label="Cancel this booking?">
+          <p>Cancel this booking? {booking.name.split(" ")[0]} gets an email saying it&apos;s cancelled, and the time opens up for someone else.</p>
+          <div className="hero-actions">
+            <button className="button danger-button" type="button" disabled={busy} onClick={() => call("cancel")}>{busy ? "Cancelling…" : "Yes, cancel it"}</button>
+            <button className="outline-button" type="button" disabled={busy} onClick={() => setConfirming(false)}>Keep booking</button>
+          </div>
+        </div>
+        : <div className="hero-actions"><a className="button" href={`tel:${booking.phone}`}>Call {booking.name.split(" ")[0]}</a>
+          <button className="outline-button" type="button" disabled={busy} onClick={() => setConfirming(true)}>Cancel booking</button></div>)}
     </div>}
     {message && <p className="manage-message" role="status">{message}</p>}
   </section>;

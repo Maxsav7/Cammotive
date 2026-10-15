@@ -32,11 +32,17 @@ API returns 503 and the UI shows the call/text alternative.
    scheduler POST it every few minutes with `Bearer <BOOKING_CRON_SECRET>`.
    Alert on missed runs, non-2xx responses or a nonzero `failed` count (also
    logged as `booking_email_failed_count`).
-6. Test with your own mailbox: book, receive the request email, confirm it from
-   Cam's email link, receive the confirmation, view by private link, request a
-   replacement, retry the booking, and verify no duplicate appointment/email.
-   Cam's `/manage` link grants approve/decline for that one booking; treat the
+6. Test with your own mailbox: book, receive the "Booked" email, open Cam's
+   "New booking" email, view by private link, request a replacement, retry the
+   booking, cancel from Cam's link, and verify no duplicate appointment/email.
+   Cam's `/manage` link grants view/cancel for that one booking; treat the
    `CAM_BOOKING_EMAIL` mailbox as an admin credential (use 2FA).
+   Google Calendar sync (optional) uses a service account with access to Cam's
+   calendar only through sharing; it can read free/busy and edit events on
+   that calendar. Store its private key only in the hosting secret manager and
+   rotate it in Google Cloud if exposed. Event descriptions contain the
+   customer's name, phone, email and vehicle, so share that calendar with no one
+   who shouldn't see them.
    Verify hosting headers and least-privilege credentials. Only then set
    `BOOKING_SCHEDULER_READY=true` and `BOOKING_ENABLED=true` for customers.
 

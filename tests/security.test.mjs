@@ -69,6 +69,12 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     // are safe on a database that already has the legacy/hand-written schema.
     for (let pass = 0; pass < 2; pass++) for (const sql of migrationStatements()) await database.prepare(sql).run();
     let emails = [], failEmail = false, wrongHost = false, dbFailure = false, failOutboxInsert = false;
+    // Google Calendar stand-in: events by id, Cam's existing busy blocks, and an outage switch.
+    const googleEvents = new Map(); let googleBusy = [], googleDown = false, googleTokens = 0;
+    const googleKeys = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"]);
+    // A throwaway key generated per run; the PEM label is split so the secret scanner ignores it.
+    const pemLabel = edge => `-----${edge} PRIVATE` + " KEY-----";
+    const googlePem = `${pemLabel("BEGIN")}\\n${Buffer.from(await crypto.subtle.exportKey("pkcs8", googleKeys.privateKey)).toString("base64").match(/.{1,64}/g).join("\\n")}\\n${pemLabel("END")}\\n`;
     globalThis.fetch = async (url, options) => {
       if (String(url).startsWith("https://api.cloudflare.com/")) {
         assert.equal(options.cache, "no-store");
@@ -88,6 +94,31 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       if (String(url) === "https://api.resend.com/emails") {
         emails.push({ ...JSON.parse(options.body), id: options.headers["Idempotency-Key"] });
         return Response.json({}, { status: failEmail ? 503 : 200 });
+      }
+      if (String(url) === "https://oauth2.googleapis.com/token") {
+        if (googleDown) return Response.json({}, { status: 503 });
+        const [header, claims, signature] = new URLSearchParams(options.body).get("assertion").split(".");
+        assert.ok(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", googleKeys.publicKey, Buffer.from(signature, "base64url"), new TextEncoder().encode(`${header}.${claims}`)), "JWT is signed with the service-account key");
+        assert.equal(JSON.parse(Buffer.from(claims, "base64url")).iss, "camotive@test.iam.gserviceaccount.com");
+        googleTokens++;
+        return Response.json({ access_token: "google-token", expires_in: 3600 });
+      }
+      if (String(url).startsWith("https://www.googleapis.com/calendar/v3/")) {
+        if (googleDown) return Response.json({}, { status: 503 });
+        assert.equal(options.headers.Authorization, "Bearer google-token");
+        const path = new URL(url).pathname;
+        if (path.endsWith("/freeBusy")) {
+          const { timeMin, timeMax } = JSON.parse(options.body);
+          assert.ok(Date.parse(timeMax) - Date.parse(timeMin) <= 30 * 86400000, "free/busy ranges are at most 30 days");
+          return Response.json({ calendars: { "cam@example.com": { busy: googleBusy.filter(b => Date.parse(b.start) < Date.parse(timeMax) && Date.parse(b.end) > Date.parse(timeMin)) } } });
+        }
+        assert.match(path, /^\/calendar\/v3\/calendars\/cam%40example\.com\/events/);
+        if (options.method === "POST") {
+          const event = JSON.parse(options.body);
+          if (googleEvents.has(event.id)) return Response.json({}, { status: 409 });
+          googleEvents.set(event.id, event); return Response.json(event);
+        }
+        if (options.method === "DELETE") return new Response(null, { status: googleEvents.delete(path.split("/").pop()) ? 204 : 404 });
       }
       throw new Error(`Unexpected network access: ${url}`);
     };
@@ -121,6 +152,11 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const reset = async () => {
       await database.batch(["booking_outbox", "secure_bookings", "booking_limits", "appointments"].map(table => database.prepare(`DELETE FROM ${table}`)));
       emails = []; failEmail = false; wrongHost = false; dbFailure = false; failOutboxInsert = false;
+      googleEvents.clear(); googleBusy = []; googleDown = false;
+    };
+    const withGoogle = async run => {
+      Object.assign(process.env, { GOOGLE_SERVICE_ACCOUNT_EMAIL: "camotive@test.iam.gserviceaccount.com", GOOGLE_SERVICE_ACCOUNT_KEY: googlePem, GOOGLE_CALENDAR_ID: "cam@example.com" });
+      try { await run(); } finally { for (const key of ["GOOGLE_SERVICE_ACCOUNT_EMAIL", "GOOGLE_SERVICE_ACCOUNT_KEY", "GOOGLE_CALENDAR_ID"]) delete process.env[key]; }
     };
     try {
       await t.test("fails closed while disabled, regardless of submitted data", async () => {
@@ -156,15 +192,17 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         const result = await response.json(); assert.equal(result.total, 325); assert.match(result.confirmationCode, /^CAM-[A-F0-9]{12}$/);
         const row = await database.prepare("SELECT * FROM secure_bookings").first();
         assert.ok(!JSON.stringify(row).includes("Synthetic Street"));
-        const job = await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE '%-received'").first();
+        const job = await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE '%-booked'").first();
         const email = await security.unseal(job.payload); const raw = email.text.match(/#access=([a-f0-9]{64})/)[1];
         assert.ok(!JSON.stringify(row).includes(raw));
         assert.equal((await route.GET(lookup())).status, 401);
         assert.equal((await route.GET(new Request(`https://booking.example.com/api/appointments?code=${result.confirmationCode}`))).status, 401);
         const authorized = await route.GET(lookup(raw)); assert.equal(authorized.status, 200);
         assert.match(authorized.headers.get("cache-control"), /no-store/);
-        const view = await authorized.json(); assert.equal(view.appointment.total, 325); assert.equal(view.appointment.status, "pending");
-        assert.match(email.subject, /^Request received/); assert.match(email.text, /not a confirmation yet/);
+        const view = await authorized.json(); assert.equal(view.appointment.total, 325); assert.equal(view.appointment.status, "confirmed");
+        assert.match(email.subject, /^Booked/); assert.match(email.text, /You're booked/);
+        assert.match(email.html, /You&#39;re booked, Audit\./); assert.match(email.html, /\/brand\/camotive-email-logo\.png/);
+        assert.match(Buffer.from(email.attachments[0].content, "base64").toString(), /STATUS:CONFIRMED/);
         assert.equal(view.appointment.address, undefined); assert.equal(view.appointment.email, undefined);
         await database.prepare("UPDATE secure_bookings SET token_expires = 0").run();
         assert.equal((await route.GET(lookup(raw))).status, 401);
@@ -176,14 +214,14 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         const codes = await Promise.all(responses.map(r => r.json())); assert.equal(codes[0].confirmationCode, codes[1].confirmationCode);
         assert.equal(await count("secure_bookings"), 1); assert.equal(await count("booking_outbox"), 2);
         assert.equal((await route.POST(request({ ...data, vehicle: "Different car" }, key))).status, 409);
-        assert.equal((await route.POST(request({ ...data, email: "second@example.com", phone: "2105550124" }))).status, 409, "same slot is held");
+        assert.equal((await route.POST(request({ ...data, email: "second@example.com", phone: "2105550124" }))).status, 409, "same slot is taken");
         assert.equal(await count("booking_outbox"), 2);
         assert.equal((await route.POST(request({ ...data, time: "1:00 PM", email: "second@example.com", phone: "2105550124" }))).status, 201, "second slot that day is open");
         await database.prepare("DELETE FROM booking_limits").run(); // fresh per-visitor allowance for the race
         const racing = await Promise.all([3, 4].map(n => route.POST(request({ ...data, date: chicagoDay(9), email: `race${n}@example.com`, phone: `210555012${n}` }))));
         assert.deepEqual(racing.map(r => r.status).sort(), [201, 409], "two people racing for one slot: exactly one wins");
       });
-      await t.test("availability shows two slots a day, hides who booked, and releases declined slots", async () => {
+      await t.test("availability shows two slots a day, hides who booked, and releases cancelled slots", async () => {
         await reset();
         const closed = await slots(chicagoDay(0), 2);
         assert.equal(closed.enabled, true);
@@ -195,39 +233,106 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.deepEqual(after.days[0].slots.map(s => s.state), ["taken", "open"]);
         assert.ok(!JSON.stringify(after).includes("audit@example.com") && !JSON.stringify(after).includes("CAM-"));
         const { code, token } = await adminLink();
-        assert.equal((await decide(code, "decline", token)).status, 200);
-        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open"], "declined slot is released");
-        assert.match((await sealed("%-declined")).subject, /can't take/);
+        assert.equal((await decide(code, "cancel", token)).status, 200);
+        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open"], "cancelled slot is released");
+        const cancelled = await sealed("%-cancelled");
+        assert.match(cancelled.subject, /^Cancelled/);
+        assert.match(Buffer.from(cancelled.attachments[0].content, "base64").toString(), /METHOD:CANCEL[\s\S]*UID:CAM-[A-F0-9]{12}@camotive[\s\S]*SEQUENCE:1/);
         assert.equal((await route.POST(request({ ...valid(), email: "next@example.com", phone: "2105550125" }))).status, 201, "released slot can be booked again");
       });
-      await t.test("only Cam's private link can view and decide; approval sends a calendar invite", async () => {
+      await t.test("bookings confirm instantly; only Cam's private link can view and cancel", async () => {
         await reset(); await route.POST(request(valid()));
+        assert.equal((await database.prepare("SELECT status FROM secure_bookings").first()).status, "confirmed");
+        const cam = await sealed("%-cam");
+        assert.equal(cam.to, "owner@example.com"); assert.match(cam.subject, /^New booking/);
         const { code, token } = await adminLink();
+        const camIcs = Buffer.from(cam.attachments[0].content, "base64").toString();
+        assert.match(camIcs, /BEGIN:VEVENT/); assert.match(camIcs, new RegExp(`UID:${code}@camotive`)); assert.match(camIcs, /DTSTART:\d{8}T1[34]0000Z/, "8:00 AM Chicago is 13:00 or 14:00 UTC");
         assert.equal((await decide(code, "view")).status, 401);
         assert.equal((await decide(code, "view", "f".repeat(64))).status, 401);
-        assert.equal((await decide(code, "approve", token, { origin: "https://evil.example" })).status, 403);
+        assert.equal((await decide(code, "cancel", token, { origin: "https://evil.example" })).status, 403);
+        assert.equal((await decide(code, "approve", token)).status, 400, "approval no longer exists");
         const viewed = await (await decide(code, "view", token)).json();
-        assert.equal(viewed.booking.status, "pending"); assert.equal(viewed.booking.address, "100 Synthetic Street");
-        const approved = await decide(code, "approve", token); assert.equal(approved.status, 200);
-        assert.equal((await approved.json()).booking.status, "confirmed");
-        assert.equal((await decide(code, "decline", token)).status, 409, "already decided");
-        const confirmation = await sealed("%-confirmed");
-        assert.match(confirmation.subject, /^Confirmed/);
-        const ics = Buffer.from(confirmation.attachments[0].content, "base64").toString();
-        assert.match(ics, /BEGIN:VEVENT/); assert.match(ics, new RegExp(`UID:${code}@camotive`)); assert.match(ics, /DTSTART:\d{8}T1[34]0000Z/, "8:00 AM Chicago is 13:00 or 14:00 UTC");
-        assert.equal((await database.prepare("SELECT status FROM secure_bookings").first()).status, "confirmed");
+        assert.equal(viewed.booking.status, "confirmed"); assert.equal(viewed.booking.address, "100 Synthetic Street");
+        const cancelled = await decide(code, "cancel", token); assert.equal(cancelled.status, 200);
+        assert.equal((await cancelled.json()).booking.status, "cancelled");
+        assert.equal((await decide(code, "cancel", token)).status, 409, "already cancelled");
+        assert.equal((await database.prepare("SELECT status FROM secure_bookings").first()).status, "cancelled");
       });
-      await t.test("maintenance sends one reminder the day before a confirmed appointment", async () => {
+      await t.test("customer text is escaped in HTML emails", async () => {
+        await reset();
+        await route.POST(request({ ...valid(), name: "Eve <img src=x onerror=alert(1)>", vehicle: "Car & \"Co\" <b>bold</b>" }));
+        for (const id of ["%-booked", "%-cam"]) {
+          const { html } = await sealed(id);
+          assert.ok(!/<img src=x|<b>bold/.test(html), id);
+          assert.match(html, /&lt;b&gt;bold&lt;\/b&gt;/);
+        }
+      });
+      await t.test("maintenance sends one reminder the day before, and none for cancelled bookings", async () => {
         await reset(); await route.POST(request({ ...valid(), date: chicagoDay(1) }));
-        const { code, token } = await adminLink();
+        await route.POST(request({ ...valid(), date: chicagoDay(1), time: "1:00 PM", email: "gone@example.com", phone: "2105550127" }));
+        const gone = (await database.prepare("SELECT code FROM secure_bookings WHERE time = '1:00 PM'").first()).code;
+        const cams = await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE ?").bind(`${gone}-cam`).first();
+        const goneToken = (await security.unseal(cams.payload)).text.match(/&token=([a-f0-9]{64})/)[1];
+        assert.equal((await decide(gone, "cancel", goneToken)).status, 200);
         const run = async () => (await (await maintenance.POST(new Request("https://booking.example.com/api/internal/booking-maintenance", { method: "POST", headers: { authorization: `Bearer ${process.env.BOOKING_CRON_SECRET}` } }))).json());
-        assert.equal((await run()).reminders, 0, "no reminder while still pending");
-        await decide(code, "approve", token);
         assert.equal((await run()).reminders, 1);
         assert.equal((await run()).reminders, 0, "never twice");
         // Sent payloads are erased from the outbox, so check what reached the email provider.
-        assert.equal(emails.filter(e => /^Reminder: Camotive detail tomorrow/.test(e.subject)).length, 1);
+        const reminders = emails.filter(e => /^Reminder: Camotive detail tomorrow/.test(e.subject));
+        assert.equal(reminders.length, 1); assert.deepEqual(reminders[0].to, ["audit@example.com"]);
+        assert.ok(reminders[0].html && reminders[0].text, "sent as HTML with a plain-text part");
       });
+      await t.test("Google Calendar: bookings are added and removed, busy time blocks slots, outages fail open", () => withGoogle(async () => {
+        await reset();
+        const { date } = valid();
+        // Cam is busy 2–4 PM Chicago on the day: the 1:00 PM slot is taken, 8:00 AM stays open.
+        const twoPm = new Date(`${date}T19:00:00Z`).getTime() + (new Date(`${date}T12:00:00Z`).toLocaleString("en-US", { timeZone: "America/Chicago", timeZoneName: "short" }).includes("CDT") ? 0 : 3600000);
+        googleBusy = [{ start: new Date(twoPm).toISOString(), end: new Date(twoPm + 2 * 3600000).toISOString() }];
+        assert.deepEqual((await slots(date, 1)).days[0].slots.map(s => s.state), ["open", "taken"]);
+        assert.equal((await route.POST(request({ ...valid(), time: "1:00 PM" }))).status, 409, "busy on Cam's calendar");
+        assert.equal(await count("secure_bookings"), 0);
+
+        const booked = await (await route.POST(request(valid()))).json();
+        assert.equal(booked.status, "confirmed");
+        assert.equal(await count("booking_outbox"), 3, "two emails and one calendar job");
+        const { code, token } = await adminLink(); // read before sending erases the payloads
+        await outbox.dispatchEmails(5);
+        const id = `camotive${booked.confirmationCode.slice(4).toLowerCase()}`;
+        const event = googleEvents.get(id);
+        assert.ok(event, "event added to Cam's calendar with a stable id");
+        assert.match(event.description, /\+12105550123/); assert.equal(event.location, "100 Synthetic Street");
+        assert.equal(Date.parse(event.end.dateTime) - Date.parse(event.start.dateTime), 4 * 3600000);
+        // A retried create is harmless (409 from Google counts as done).
+        await database.prepare("UPDATE booking_outbox SET status = 'pending', attempts = 0, next_attempt = 0, lease_until = 0, payload = ? WHERE id LIKE '%-calendar'")
+          .bind(await security.seal({ kind: "calendar", op: "create", event: { code: booked.confirmationCode, date, time: "8:00 AM", title: "t", location: "l", description: "d" } })).run();
+        await outbox.dispatchEmails(5);
+        assert.equal(Number((await database.prepare("SELECT count(*) AS n FROM booking_outbox WHERE status = 'sent'").first()).n), 3);
+
+        assert.equal((await decide(code, "cancel", token)).status, 200);
+        await outbox.dispatchEmails(5);
+        assert.equal(googleEvents.has(id), false, "cancelling removes the event");
+
+        // Google outage: availability and booking keep working on the database alone; the calendar job retries.
+        await reset(); googleDown = true; await new Promise(r => setTimeout(r, 0));
+        const other = chicagoDay(20);
+        assert.deepEqual((await slots(other, 1)).days[0].slots.map(s => s.state), ["open", "open"]);
+        const outage = await route.POST(request({ ...valid(), date: other })); assert.equal(outage.status, 201);
+        await outbox.dispatchEmails(5);
+        assert.equal(Number((await database.prepare("SELECT count(*) AS n FROM booking_outbox WHERE id LIKE '%-calendar' AND status = 'pending'").first()).n), 1, "calendar job waits for a retry");
+        googleDown = false;
+        await database.prepare("UPDATE booking_outbox SET next_attempt = 0").run();
+        await outbox.dispatchEmails(5);
+        assert.equal(googleEvents.size, 1);
+      }));
+      await t.test("a delayed calendar create never re-adds a cancelled booking", () => withGoogle(async () => {
+        await reset(); await route.POST(request(valid()));
+        const { code, token } = await adminLink();
+        assert.equal((await decide(code, "cancel", token)).status, 200);
+        await outbox.dispatchEmails(10);
+        assert.equal(googleEvents.size, 0);
+        assert.ok(googleTokens > 0);
+      }));
       await t.test("quote requests need the bot check, queue two emails and store nothing else", async () => {
         await reset();
         const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", email: "quote@example.com", phone: "2105550126", timing: "Next month", notes: "White paint", turnstileToken: "valid-quote" };

@@ -9,3 +9,5 @@ export const testMode = () => testOrigin() !== null;
 export const d1Api = () => `${testOrigin() ?? "https://api.cloudflare.com"}/client/v4`;
 export const turnstileVerifyUrl = () => `${testOrigin() ?? "https://challenges.cloudflare.com"}/turnstile/v0/siteverify`;
 export const resendEmailsUrl = () => `${testOrigin() ?? "https://api.resend.com"}/emails`;
+export const googleTokenUrl = () => `${testOrigin() ?? "https://oauth2.googleapis.com"}/token`;
+export const googleCalendarApi = () => `${testOrigin() ?? "https://www.googleapis.com"}/calendar/v3`;

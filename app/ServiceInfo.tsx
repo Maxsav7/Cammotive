@@ -38,7 +38,7 @@ export function DetailingStories() {
       facts={[
         ["What's added", "Fabric shampoo or extraction, leather or Alcantara treatment, paint decontamination and a 3–6 month sealant."],
         ["Best for", "Family cars, work trucks, pet hair, spills, or getting a car ready to sell."],
-        ["Time", "A longer visit than the Full Detail. We confirm timing when we confirm your request."],
+        ["Time", "A longer visit than the Full Detail. Allow most of your morning or afternoon slot."],
         ["What it won't fix", "Paint defects and permanent damage to fabric or leather. We'll tell you honestly what's possible."],
         ["Afterwards", "The sealant adds gloss and makes washing easier for a few months."],
       ]}
@@ -88,10 +88,10 @@ export function DetailChooser() {
 
 export function AfterYouBook() {
   return <section className="section after-you-book" aria-labelledby="after-heading">
-    <div className="section-heading"><p className="eyebrow">How booking works</p><h2 id="after-heading">What happens after you book.</h2><p>Online booking sends us a request and holds your time. Nothing is charged online.</p></div>
+    <div className="section-heading"><p className="eyebrow">How booking works</p><h2 id="after-heading">What happens after you book.</h2><p>Open times book instantly, and nothing is charged online.</p></div>
     <ol className="timeline">
-      <li><span>1</span><h3>Request</h3><p>Choose a detail and an open time. The slot is held for you and you get an email copy of your request.</p></li>
-      <li><span>2</span><h3>Confirmation</h3><p>We review it and confirm by email, with a calendar invite. If the time doesn&apos;t work, we&apos;ll say so and the slot is released.</p></li>
+      <li><span>1</span><h3>Book</h3><p>Choose a detail and an open time. Only times we can actually make are shown, so it&apos;s booked the moment you confirm.</p></li>
+      <li><span>2</span><h3>Confirmation</h3><p>Your confirmation email arrives right away, with a calendar invite and a link to view your appointment.</p></li>
       <li><span>3</span><h3>Reminder</h3><p>The day before, a reminder email with your time, address and what to have ready.</p></li>
       <li><span>4</span><h3>Your detail</h3><p>We arrive at your slot. A {depositPercent}% deposit is collected on site before work begins.</p></li>
     </ol>
