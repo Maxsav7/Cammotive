@@ -1,6 +1,6 @@
 # Vercel deployment and booking setup
 
-Production: https://camotive.vercel.app (GitHub `Maxsav7/Cammotive`, branch `main`).
+Production: https://www.camotivedetailing.com (also https://camotive.vercel.app; GitHub `Maxsav7/Cammotive`, branch `main`).
 `vercel.json` selects the native Next.js build (`npm run build:vercel`) and a daily
 cron for booking maintenance. Use Node 22.
 
@@ -15,10 +15,11 @@ production.
 
 1. **Custom domain for email.** Resend only sends from a domain you have
    verified with DNS records, and `vercel.app` cannot be verified by you. Add your
-   own domain (for example `camotivedetailing.com`) in Resend, add the SPF/DKIM
-   records it gives you plus a DMARC record, and set `BOOKING_FROM_EMAIL` to an
-   address on it. Ideally point the same domain at Vercel and use it as
-   `BOOKING_ORIGIN`.
+   own domain in Resend: add `camotivedetailing.com`, add the SPF/DKIM records it
+   gives you plus a DMARC record at your DNS provider, and set
+   `BOOKING_FROM_EMAIL` to `Camotive Detailing <bookings@camotivedetailing.com>`.
+   Set `BOOKING_ORIGIN` to `https://www.camotivedetailing.com` (the bare domain
+   redirects there, so customers always land on `www`).
 2. **Database.** In Cloudflare, create a D1 database. Then create the tables
    (safe to re-run):
 
@@ -30,7 +31,7 @@ production.
    Create an API token with **D1 Edit** permission for that account only. Set
    `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_D1_API_TOKEN`.
 3. **Bot check.** Create a Cloudflare Turnstile widget for your exact hostname
-   (`camotive.vercel.app` or your custom domain). Set `TURNSTILE_SITE_KEY` and
+   (`www.camotivedetailing.com`). Set `TURNSTILE_SITE_KEY` and
    `TURNSTILE_SECRET_KEY`.
 4. **Secrets.** Run `openssl rand -hex 32` four times and set
    `BOOKING_ENCRYPTION_KEY`, `BOOKING_HASH_SECRET`, `BOOKING_CRON_SECRET` and
