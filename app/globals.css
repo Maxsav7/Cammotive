@@ -111,11 +111,10 @@ p { text-wrap: pretty; }
 
 /* ---------- Logo ---------- */
 .brand { display: inline-flex; flex: none; }
-.logo { display: inline-flex; align-items: center; gap: 12px; color: inherit; }
-.logo-mark { width: 40px; height: 36px; flex: none; filter: drop-shadow(0 2px 6px #0007); }
-.logo-word { display: flex; flex-direction: column; line-height: 1; }
-.logo-name { font-size: 17px; font-weight: 660; font-stretch: 125%; letter-spacing: .14em; text-transform: uppercase; }
-.logo-sub { margin-top: 6px; font-size: 9.5px; font-weight: 500; font-stretch: 125%; letter-spacing: .5em; text-transform: uppercase; color: color-mix(in srgb, currentColor 74%, transparent); }
+/* Logo: one SVG lockup (app/Logo.tsx). Height sets its size; width follows. */
+.logo { display: block; height: 40px; width: auto; filter: drop-shadow(0 2px 4px #0008); }
+.site-shell[data-theme="light"] { --steel-1: #9a99a6; --steel-2: #4b4a56; --steel-3: #1c1b22; --steel-edge: #000; }
+.site-shell[data-theme="light"] .logo { filter: drop-shadow(0 1px 1.5px #0003); }
 
 /* ---------- Header ---------- */
 .header-wrap { position: sticky; top: 0; z-index: 80; height: 76px; }
@@ -606,8 +605,9 @@ p { text-wrap: pretty; }
 
 /* ========================================================================== */
 @media (max-width: 1100px) {
-  /* Tighter spacing keeps the full header on one line down to 801px. */
+  /* Tighter spacing and a smaller logo keep the full header on one line down to 801px. */
   .site-header { gap: 16px; }
+  .logo { height: 34px; }
   .desktop-nav { gap: 18px; }
   .header-phone { display: none; }
   .section { padding: 104px var(--gutter); }
@@ -625,9 +625,7 @@ p { text-wrap: pretty; }
   .header-actions { gap: 10px; }
   .header-actions .button { display: none; }
   .mobile-toggle { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; font-size: 22px; }
-  .logo-mark { width: 34px; height: 31px; }
-  .logo-name { font-size: 15px; }
-  .logo-sub { font-size: 9.5px; letter-spacing: .28em; }
+  .logo { height: 34px; }
 
   .hero { margin-top: -64px; min-height: 92svh; }
   .hero-copy { padding: 120px var(--gutter) 56px; }
