@@ -1,5 +1,5 @@
 // End-to-end booking test: the production build runs fully configured, but every
-// third-party service (D1, Turnstile, Resend, Google Calendar) is a local fake on loopback.
+// third-party service (D1, Turnstile, Brevo, Google Calendar) is a local fake on loopback.
 // Run with: npm run test:e2e  (builds first).
 import { defineConfig, devices } from "@playwright/test";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
@@ -35,7 +35,7 @@ export default defineConfig({
       env: {
         TEST_PROVIDER_ORIGIN: `http://127.0.0.1:${fakes}`, VERCEL: "", BOOKING_ENABLED: "true", BOOKING_SCHEDULER_READY: "true",
         BOOKING_ORIGIN: `http://127.0.0.1:${port}`, CLOUDFLARE_ACCOUNT_ID: "test", CLOUDFLARE_D1_DATABASE_ID: "test", CLOUDFLARE_D1_API_TOKEN: "test",
-        TURNSTILE_SITE_KEY: "test-site-key", TURNSTILE_SECRET_KEY: "test", RESEND_API_KEY: "test",
+        TURNSTILE_SITE_KEY: "test-site-key", TURNSTILE_SECRET_KEY: "test", BREVO_API_KEY: "test",
         BOOKING_FROM_EMAIL: "Camotive <bookings@example.com>", CAM_BOOKING_EMAIL: "cam@example.com",
         BOOKING_ENCRYPTION_KEY: secret(), BOOKING_HASH_SECRET: secret(), BOOKING_CRON_SECRET: secret(),
         // Stored the way Vercel often keeps it: one line with literal "\n".

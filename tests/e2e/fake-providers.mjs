@@ -1,4 +1,4 @@
-// Local stand-ins for Cloudflare D1 (REST API), Turnstile siteverify, Resend and
+// Local stand-ins for Cloudflare D1 (REST API), Turnstile siteverify, Brevo and
 // Google Calendar (OAuth token, free/busy, events), used only by the end-to-end
 // booking test. The app talks to these when
 // TEST_PROVIDER_ORIGIN points at loopback, which is ignored on Vercel.
@@ -56,9 +56,11 @@ createServer(async (req, res) => {
       const action = /^test-(booking|recovery|quote)$/.exec(response ?? "")?.[1];
       return send(res, 200, action ? { success: true, hostname: "127.0.0.1", action } : { success: false });
     }
-    if (req.method === "POST" && url.pathname === "/emails") {
-      const email = JSON.parse(raw); emails.push(email);
-      return send(res, 200, { id: `email-${emails.length}` });
+    if (req.method === "POST" && url.pathname === "/v3/smtp/email") {
+      if (req.headers["api-key"] !== "test") return send(res, 401, { message: "Key not found" });
+      // Brevo's request shape, stored in a simpler form for the test to read.
+      const b = JSON.parse(raw); emails.push(({ from: b.sender, to: b.to.map(r => r.email), subject: b.subject, text: b.textContent, html: b.htmlContent, attachments: (b.attachment ?? []).map(a => ({ filename: a.name, content: a.content })) }));
+      return send(res, 201, { messageId: `<email-${emails.length}@fake.brevo>` });
     }
     if (req.method === "POST" && url.pathname === "/token") {
       const form = new URLSearchParams(raw);

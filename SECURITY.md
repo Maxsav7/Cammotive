@@ -21,7 +21,7 @@ API returns 503 and the UI shows the call/text alternative.
 3. Configure Turnstile for the exact production hostname, with no localhost or
    wildcard allowance. The server verifies the hostname and action. Use a real
    production widget, not Cloudflare's always-pass testing keys.
-4. Verify the Resend sending domain and owner mailbox. Set a provider spending
+4. Authenticate the Brevo sending domain and owner mailbox. Set a provider spending
    limit/alert. This code permits at most 100 email attempts per UTC day;
    provider account caps must also be configured independently.
 5. Emails are sent immediately after each booking (Next.js `after()`), and any
@@ -59,7 +59,7 @@ API returns 503 and the UI shows the call/text alternative.
 | `BOOKING_HASH_SECRET` | Independent random secret, at least 32 characters |
 | `BOOKING_CRON_SECRET` | Independent random secret, at least 32 characters (external scheduler) |
 | `CRON_SECRET` | Independent random secret, at least 32 characters (Vercel Cron) |
-| `RESEND_API_KEY` | Scoped sending credential |
+| `BREVO_API_KEY` | Sending credential (Brevo API key) |
 | `BOOKING_FROM_EMAIL` | Verified sender |
 | `CAM_BOOKING_EMAIL` | Owner notification mailbox |
 
@@ -101,8 +101,9 @@ independently with coordinated scheduler updates.
   error, so a date is never held without anyone being told. This does not rely
   on D1 REST batches being transactional, which Cloudflare does not document.
 - Emails use an encrypted transactional outbox. The dispatcher uses
-  leases, a 10-second provider timeout, stable Resend idempotency keys, and up
-  to five attempts within 23 hours (inside the provider's 24-hour dedup window).
+  leases, a 10-second provider timeout, and up to five attempts within 23
+  hours. Brevo has no idempotency keys, so a timeout after Brevo accepted a
+  message can, rarely, send it twice; each job id is sent as `X-Camotive-Job`.
   Delivery failure never rolls back an already saved booking. UI says queued,
   not delivered. Failed jobs need operator attention; automatic retries do not
   continue forever or past their deduplication deadline.
