@@ -10,14 +10,16 @@ shows "call or text Camotive". That is the intended safe default.
 ## One-time setup
 
 Read [SECURITY.md](./SECURITY.md) first. Do steps 1–7 on a **staging** setup
-(separate D1 database, Turnstile widget and Resend key, your own inbox) before
+(separate D1 database, Turnstile widget and Brevo key, your own inbox) before
 production.
 
-1. **Custom domain for email.** Resend only sends from a domain you have
-   verified with DNS records, and `vercel.app` cannot be verified by you. Add your
-   own domain in Resend: add `camotivedetailing.com`, add the SPF/DKIM records it
-   gives you plus a DMARC record at your DNS provider, and set
-   `BOOKING_FROM_EMAIL` to `Camotive Detailing <bookings@camotivedetailing.com>`.
+1. **Email (Brevo, free for 300 emails/day).** Create a free Brevo account.
+   Under *Senders, Domains & Dedicated IPs → Domains*, add
+   `camotivedetailing.com` and add the DNS records it shows (Brevo code, DKIM,
+   DMARC) in Cloudflare DNS; wait for "Authenticated". Then *SMTP & API → API
+   Keys → Generate* and set `BREVO_API_KEY`. Set `BOOKING_FROM_EMAIL` to
+   `Camotive Detailing <bookings@camotivedetailing.com>` (no mailbox needed for
+   that address).
    Set `BOOKING_ORIGIN` to `https://www.camotivedetailing.com` (the bare domain
    redirects there, so customers always land on `www`).
 2. **Database.** In Cloudflare, create a D1 database. Then create the tables
@@ -38,7 +40,7 @@ production.
    `CRON_SECRET` (a different value each). Store the encryption key in your
    password manager too: losing it makes existing bookings unreadable.
 5. **Remaining variables.** `BOOKING_ORIGIN` (exact https origin, no trailing
-   slash), `RESEND_API_KEY`, `CAM_BOOKING_EMAIL`. See `.env.example`.
+   slash), `BREVO_API_KEY`, `CAM_BOOKING_EMAIL`. See `.env.example`.
 6. **Google Calendar (optional, recommended).** Adds every booking to Cam's
    Google Calendar, removes it if he cancels, and stops customers booking times
    he's already busy. Booking works without it; skip the three variables to
@@ -110,4 +112,4 @@ if the schema and `drizzle/` disagree.
 
 `npm run typecheck`, `npm run test:security`, `npm test`, `npm run test:vercel`,
 `npm run test:browser`, and `npm run test:e2e` (the whole booking flow against
-local fakes of D1, Turnstile, Resend and Google Calendar).
+local fakes of D1, Turnstile, Brevo and Google Calendar).

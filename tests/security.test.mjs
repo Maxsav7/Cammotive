@@ -56,8 +56,8 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const originalFetch = globalThis.fetch; const originalEnv = { ...process.env };
     Object.assign(process.env, {
       BOOKING_ENABLED: "true", BOOKING_SCHEDULER_READY: "true", BOOKING_ORIGIN: "https://booking.example.com",
-      TURNSTILE_SECRET_KEY: "synthetic", TURNSTILE_SITE_KEY: "synthetic", RESEND_API_KEY: "synthetic",
-      BOOKING_FROM_EMAIL: "booking@example.com", CAM_BOOKING_EMAIL: "owner@example.com",
+      TURNSTILE_SECRET_KEY: "synthetic", TURNSTILE_SITE_KEY: "synthetic", BREVO_API_KEY: "synthetic",
+      BOOKING_FROM_EMAIL: "Camotive Detailing <booking@example.com>", CAM_BOOKING_EMAIL: "owner@example.com",
       BOOKING_ENCRYPTION_KEY: "ab".repeat(32), BOOKING_HASH_SECRET: "synthetic-hash-secret-".repeat(3),
       BOOKING_CRON_SECRET: "synthetic-cron-secret-".repeat(3), VERCEL: "1",
       CLOUDFLARE_ACCOUNT_ID: "test", CLOUDFLARE_D1_DATABASE_ID: "test", CLOUDFLARE_D1_API_TOKEN: "synthetic",
@@ -91,8 +91,12 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         const input = JSON.parse(options.body);
         return Response.json({ success: input.response.startsWith("valid-"), hostname: wrongHost ? "evil.example" : "booking.example.com", action: input.response.split("-")[1] });
       }
-      if (String(url) === "https://api.resend.com/emails") {
-        emails.push({ ...JSON.parse(options.body), id: options.headers["Idempotency-Key"] });
+      if (String(url) === "https://api.brevo.com/v3/smtp/email") {
+        assert.equal(options.headers["api-key"], "synthetic");
+        const b = JSON.parse(options.body);
+        assert.deepEqual(b.sender, { name: "Camotive Detailing", email: "booking@example.com" });
+        assert.ok(b.htmlContent && b.textContent, "both HTML and plain text are sent");
+        emails.push({ ...({ from: b.sender, to: b.to.map(r => r.email), subject: b.subject, text: b.textContent, html: b.htmlContent, attachments: (b.attachment ?? []).map(a => ({ filename: a.name, content: a.content })) }), id: b.headers["X-Camotive-Job"] });
         return Response.json({}, { status: failEmail ? 503 : 200 });
       }
       if (String(url) === "https://oauth2.googleapis.com/token") {
@@ -366,7 +370,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.equal(await count("booking_outbox"), 3);
         assert.notEqual((await database.prepare("SELECT token_hash FROM secure_bookings").first()).token_hash, old.token_hash);
       });
-      await t.test("outbox retries use stable provider idempotency and never send SMS", async () => {
+      await t.test("outbox retries reuse the same job id and never send SMS", async () => {
         await reset(); await route.POST(request(valid()));
         failEmail = true; assert.equal(await outbox.dispatchEmails(1), 0); const attempted = emails[0].id;
         assert.equal(await count("secure_bookings"), 1);

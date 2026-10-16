@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { db, limit } from "./booking-store";
 import { seal, token, unseal } from "./booking-security";
-import { resendEmailsUrl } from "./providers";
+import { brevoEmailUrl } from "./providers";
 import { runCalendarJob, type CalendarJob } from "./google-calendar";
 
 export type Attachment = { filename: string; content: string; contentType?: string }; // content is base64
@@ -24,6 +24,12 @@ export async function emailJobs(code: string | null, jobs: [id: string, job: Out
     .bind(...params);
 }
 export { accessEmail } from "./booking-emails";
+// BOOKING_FROM_EMAIL is "Name <address>" or just an address on the domain verified in Brevo.
+function sender() {
+  const value = process.env.BOOKING_FROM_EMAIL ?? "";
+  const match = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(value);
+  return match ? { name: match[1].replace(/^"|"$/g, ""), email: match[2] } : { email: value.trim() };
+}
 export async function dispatchEmails(maximum = 5) {
   let sent = 0;
   for (let i = 0; i < maximum; i++) {
@@ -45,11 +51,13 @@ export async function dispatchEmails(maximum = 5) {
       const email = payload;
       // Global budget protects against distributed abuse as well as per-person abuse.
       await limit("email-budget", "global", 100, 86400);
-      const response = await fetch(resendEmailsUrl(), {
-        method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": String(job.id) },
-        body: JSON.stringify({ from: process.env.BOOKING_FROM_EMAIL, to: [email.to], subject: email.subject, text: email.text,
-          ...(email.html ? { html: email.html } : {}),
-          ...(email.attachments?.length ? { attachments: email.attachments.map(a => ({ filename: a.filename, content: a.content, content_type: a.contentType })) } : {}) }),
+      const response = await fetch(brevoEmailUrl(), {
+        method: "POST", headers: { "api-key": process.env.BREVO_API_KEY ?? "", "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ sender: sender(), to: [{ email: email.to }], subject: email.subject, textContent: email.text,
+          htmlContent: email.html ?? `<pre style="font-family:inherit;white-space:pre-wrap">${email.text.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!)}</pre>`,
+          // Lets the job be matched to the message in Brevo's logs.
+          headers: { "X-Camotive-Job": String(job.id) },
+          ...(email.attachments?.length ? { attachment: email.attachments.map(a => ({ name: a.filename, content: a.content })) } : {}) }),
         signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error("Email delivery failed");
