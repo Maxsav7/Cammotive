@@ -49,7 +49,7 @@
           "binding": "DB",
           "database_name": "camotive-bookings-staging",
           // Replace with the staging D1 database id.
-          "database_id": "00000000-0000-4000-8000-000000000002",
+          "database_id": "94122a70-78e5-49be-afc8-c377a0c5cd84",
           "migrations_dir": "drizzle"
         }
       ],
