@@ -1,5 +1,6 @@
 "use client";
 
+import MeetTheOwner from "./MeetTheOwner";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import WorkGallery from "./WorkGallery";
 import ServiceStories from "./ServiceStories";
@@ -208,6 +209,7 @@ export default function Site({ page = "home" }: { page?: string }) {
               <a className="hero-rating" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Rated 5.0 out of 5 — view Camotive on Google (opens in a new tab)"><b className="google-g" aria-hidden="true">G</b><strong>5.0</strong><span aria-hidden="true">★★★★★</span><small>Google reviews</small></a></div></section>
           <ServiceStories />
           <section className="section convenience"><div className="section-heading"><p className="eyebrow">We come to you</p><h2>Your schedule. Your location.</h2><p>Detailing that works around your day, anywhere in San Antonio.</p></div><div className="convenience-grid">{[["Home", "Get a detail without leaving your driveway."], ["Workplace", "We work on your car while you work."], ["Apartment", "Arrange access and property permission in advance."], ["Somewhere else", "Tell us where the car is and we'll confirm the spot works."]].map(([name, desc]) => <a href="/book" key={name}><div><h3>{name}</h3><p>{desc}</p></div></a>)}</div></section>
+          <MeetTheOwner />
           {pricing}
           <AfterYouBook />
         </> : page === "manage" ? null : <section className="inner-hero"><div className="inner-hero-copy"><nav className="breadcrumb" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li>{crumbs.map(([label, href]) => <li key={label}>{href ? <a href={href}>{label}</a> : <span aria-current="page">{label}</span>}</li>)}</ol></nav><h1>{title?.[0]}</h1><p>{title?.[1]}</p>

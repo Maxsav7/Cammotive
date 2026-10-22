@@ -131,3 +131,13 @@ test("our work gallery can filter to coating projects", async ({ page }) => {
   await page.getByRole("button", { name: "Coating" }).click();
   await expect(page.locator(".photo-grid figure")).toHaveCount(4);
 });
+
+test("homepage introduces the owner with his photo", async ({ page }) => {
+  await page.goto("/");
+  const owner = page.locator("section.owner");
+  await expect(owner.getByRole("heading", { name: "Driven by detail." })).toBeVisible();
+  await expect(owner).toContainText("Camron Freeman");
+  const photo = owner.getByRole("img", { name: /Camron Freeman/ });
+  await photo.scrollIntoViewIfNeeded();
+  await expect.poll(() => photo.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+});
