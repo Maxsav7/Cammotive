@@ -143,4 +143,9 @@ test("About Us introduces the owner with his photo, and the homepage doesn't", a
   const photo = owner.getByRole("img", { name: /Camron Freeman/ });
   await photo.scrollIntoViewIfNeeded();
   await expect.poll(() => photo.evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+  // The photo scrolls with the page: it keeps its place in the section rather than following the reader.
+  const offset = () => photo.evaluate(img => img.getBoundingClientRect().top - img.closest("section").getBoundingClientRect().top);
+  const before = await offset();
+  await page.mouse.wheel(0, 600); await page.waitForTimeout(300);
+  expect(Math.abs(await offset() - before)).toBeLessThan(1);
 });
