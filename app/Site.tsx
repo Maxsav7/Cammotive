@@ -118,6 +118,7 @@ export default function Site({ page = "home" }: { page?: string }) {
     locations: ["Anywhere in San Antonio.", "Camotive is fully mobile, so we come to homes, workplaces and approved locations across the city."],
     "our-work": ["See the details for yourself.", "Recent Camotive washes, interiors, finished vehicles and ceramic coatings."],
     reviews: ["What our customers say.", "Rated 5.0 on Google. Read what our customers say about their detail."],
+    about: ["About us.", "Camotive is a mobile detailing business in San Antonio, owned and run by Camron Freeman."],
     contact: ["Let's talk about your vehicle.", "Questions about a service, your location or your paint? Call or text us directly."],
     book: ["Book your detail.", "Choose a detail and pick an open time. Your booking is confirmed instantly by email."],
     quote: ["Request a quote.", "Ceramic coating and paint correction are quoted after we understand your vehicle. Tell us about it and we'll reply within one business day."],
@@ -127,7 +128,7 @@ export default function Site({ page = "home" }: { page?: string }) {
   // Breadcrumb trail after "Home": the current page, or Service area > neighborhood.
   const pageNames: Record<string, string> = {
     "mobile-detailing": "Detailing", "ceramic-coating": "Ceramic Coating", "paint-correction": "Paint Correction",
-    locations: "Service area", "our-work": "Our Work", reviews: "Reviews", contact: "Contact",
+    locations: "Service area", "our-work": "Our Work", reviews: "Reviews", contact: "Contact", about: "About Us",
     book: "Book a detail", quote: "Request a quote", appointment: "My appointment",
   };
   const crumbs: [string, string?][] = currentArea ? [["Service area", "/locations"], [currentArea[1]]] : [[pageNames[page] ?? ""]];
@@ -192,6 +193,7 @@ export default function Site({ page = "home" }: { page?: string }) {
             <a href="/our-work" aria-current={page === "our-work" ? "page" : undefined}>Our Work</a>
             <a href={googleProfileUrl} target="_blank" rel="noopener noreferrer">Reviews<span className="sr-only"> on Google (opens in a new tab)</span></a>
             <a href="/contact" aria-current={page === "contact" ? "page" : undefined}>Contact</a>
+            <a href="/about" aria-current={page === "about" ? "page" : undefined}>About Us</a>
           </nav>
           <div className="header-actions"><button className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>{theme === "dark" ? "☼" : "☾"}</button><a className="header-phone" href="tel:+12105730671">(210) 573-0671</a><a className="button button-small" href="/book">Book a detail</a><button ref={menuButton} className="mobile-toggle" aria-expanded={mobileMenu} aria-controls="mobile-nav" aria-label={mobileMenu ? "Close navigation" : "Open navigation"} onClick={() => setMobileMenu(!mobileMenu)}>{mobileMenu ? "✕" : "☰"}</button></div>
         </header>
@@ -209,7 +211,6 @@ export default function Site({ page = "home" }: { page?: string }) {
               <a className="hero-rating" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Rated 5.0 out of 5 — view Camotive on Google (opens in a new tab)"><b className="google-g" aria-hidden="true">G</b><strong>5.0</strong><span aria-hidden="true">★★★★★</span><small>Google reviews</small></a></div></section>
           <ServiceStories />
           <section className="section convenience"><div className="section-heading"><p className="eyebrow">We come to you</p><h2>Your schedule. Your location.</h2><p>Detailing that works around your day, anywhere in San Antonio.</p></div><div className="convenience-grid">{[["Home", "Get a detail without leaving your driveway."], ["Workplace", "We work on your car while you work."], ["Apartment", "Arrange access and property permission in advance."], ["Somewhere else", "Tell us where the car is and we'll confirm the spot works."]].map(([name, desc]) => <a href="/book" key={name}><div><h3>{name}</h3><p>{desc}</p></div></a>)}</div></section>
-          <MeetTheOwner />
           {pricing}
           <AfterYouBook />
         </> : page === "manage" ? null : <section className="inner-hero"><div className="inner-hero-copy"><nav className="breadcrumb" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li>{crumbs.map(([label, href]) => <li key={label}>{href ? <a href={href}>{label}</a> : <span aria-current="page">{label}</span>}</li>)}</ol></nav><h1>{title?.[0]}</h1><p>{title?.[1]}</p>
@@ -224,6 +225,7 @@ export default function Site({ page = "home" }: { page?: string }) {
         {(page === "locations" || currentArea) && <AfterYouBook />}
         {page === "reviews" && <section className="section compact-reviews" id="reviews" aria-label="Google reviews"><a className="compact-rating" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Rated 5.0 out of 5 — view Camotive on Google (opens in a new tab)"><b className="google-g" aria-hidden="true">G</b><strong>5.0</strong><span aria-hidden="true">★★★★★</span><small>on Google</small></a><div className="compact-review-links"><a href={googleProfileUrl} target="_blank" rel="noopener noreferrer">Read the reviews on Google</a></div></section>}
         {page === "our-work" && <WorkGallery />}
+        {page === "about" && <MeetTheOwner />}
         {page === "contact" && <section className="section contact-section" id="quote"><div><p className="eyebrow">Contact us</p><h2>Call, text or send a request.</h2><p>For detailing, the quickest way is to book an open time online. For ceramic coating or paint correction, send a quote request or text us a few photos.</p><a className="contact-phone" href="tel:+12105730671">(210) 573-0671</a><div className="hero-actions"><a className="button" href="/book">Book a detail</a><a className="outline-button" href="/quote">Request a quote</a></div></div><div className="contact-card"><h3>Anywhere in San Antonio</h3><p>Homes, workplaces and approved locations.</p><hr /><h3>Already booked?</h3><p>Open the link in your email, or request a new one.</p><a href="/appointment">Find my appointment</a><hr /><h3>Follow Camotive</h3><a href="https://www.instagram.com/camotivedetailing/" target="_blank" rel="noreferrer">Instagram</a><a href="https://www.tiktok.com/@camotivedetailing" target="_blank" rel="noreferrer">TikTok</a></div></section>}
         {page === "book" && <section className="booking section" id="booking"><BookingFlow /></section>}
         {page === "quote" && <section className="section quote-section"><QuoteForm /></section>}
@@ -243,7 +245,7 @@ export default function Site({ page = "home" }: { page?: string }) {
       <footer className="footer"><div className="footer-grid"><div><a className="brand" href="/" aria-label="Camotive Detailing home"><Logo /></a><p>Mobile car detailing anywhere in San Antonio, plus ceramic coating and paint correction by quote.</p><div className="socials"><a href="https://www.instagram.com/camotivedetailing/" target="_blank" rel="noreferrer">Instagram</a><a href="https://www.tiktok.com/@camotivedetailing" target="_blank" rel="noreferrer">TikTok</a></div></div>
         <div><h3>Book</h3><a href="/book">Book a detail</a><a href="/quote">Request a quote</a><a href="/appointment">My appointment</a><a href="tel:+12105730671">(210) 573-0671</a></div>
         <div><h3>Services</h3>{navLinks.map(l => <a key={l.href} href={l.href}>{l.title}</a>)}<a href="/locations">Service area</a></div>
-        <div><h3>Camotive</h3><a href="/our-work">Our Work</a><a href={googleProfileUrl} target="_blank" rel="noopener noreferrer">Reviews<span className="sr-only"> on Google (opens in a new tab)</span></a><a href="/contact">Contact</a><a className="footer-rating" href={googleProfileUrl} target="_blank" rel="noreferrer"><span>★★★★★</span><strong>5.0 on Google</strong></a></div></div>
+        <div><h3>Camotive</h3><a href="/our-work">Our Work</a><a href={googleProfileUrl} target="_blank" rel="noopener noreferrer">Reviews<span className="sr-only"> on Google (opens in a new tab)</span></a><a href="/contact">Contact</a><a href="/about">About Us</a><a className="footer-rating" href={googleProfileUrl} target="_blank" rel="noreferrer"><span>★★★★★</span><strong>5.0 on Google</strong></a></div></div>
         <div className="footer-bottom"><p>© {new Date().getFullYear()} Camotive Detailing</p><small>Photos and videos by Camotive Detailing</small></div></footer>
       {page !== "book" && page !== "manage" && <a className="mobile-booking-cta" href={quoteCta ? "/quote" : "/book"}>{quoteCta ? "Request a quote" : "Book a detail"}</a>}
     </main>

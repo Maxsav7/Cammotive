@@ -640,6 +640,14 @@ p { text-wrap: pretty; }
   .work-videos { max-width: 640px; }
 }
 
+/* Narrow tablets: with six nav items, tighten once more so the header still fits from 801px. */
+@media (max-width: 960px) {
+  .site-header { gap: 12px; }
+  .desktop-nav { gap: 13px; font-size: 14px; }
+  .nav-dropdown > button { font-size: inherit; }
+  .header-actions { gap: 12px; }
+}
+
 @media (max-width: 800px) {
   .site-shell { --gutter: 22px; font-size: 16px; }
   .header-wrap, .site-header { height: 64px; }

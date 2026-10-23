@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const pages = ["/", "/mobile-detailing", "/ceramic-coating", "/paint-correction", "/locations", "/stone-oak",
-  "/alamo-heights", "/the-dominion", "/leon-springs", "/downtown", "/our-work", "/reviews", "/contact", "/book", "/appointment", "/quote", "/manage"];
+  "/alamo-heights", "/the-dominion", "/leon-springs", "/downtown", "/our-work", "/reviews", "/contact", "/about", "/book", "/appointment", "/quote", "/manage"];
 
 // Collects browser errors and broken same-origin requests for the current page.
 function watch(page) {
@@ -132,8 +132,11 @@ test("our work gallery can filter to coating projects", async ({ page }) => {
   await expect(page.locator(".photo-grid figure")).toHaveCount(4);
 });
 
-test("homepage introduces the owner with his photo", async ({ page }) => {
+test("About Us introduces the owner with his photo, and the homepage doesn't", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator("section.owner")).toHaveCount(0);
+  await expect(page.locator('footer a[href="/about"]')).toHaveText("About Us");
+  await page.goto("/about");
   const owner = page.locator("section.owner");
   await expect(owner.getByRole("heading", { name: "Driven by detail." })).toBeVisible();
   await expect(owner).toContainText("Camron Freeman");

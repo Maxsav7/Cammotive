@@ -1,9 +1,9 @@
-// "Meet the owner" on the homepage: Camron's portrait and his own words.
+// "Meet the owner" on the About Us page: Camron's portrait and his own words.
 export default function MeetTheOwner() {
   return <section className="section owner" aria-labelledby="owner-heading">
     <figure className="owner-photo">
       <img src="/work/camron-owner-640.webp" srcSet="/work/camron-owner-640.webp 640w, /work/camron-owner-1040.webp 1040w"
-        sizes="(max-width: 800px) 100vw, 40vw" width={1040} height={1300} loading="lazy" decoding="async"
+        sizes="(max-width: 800px) 100vw, 40vw" width={1040} height={1300} decoding="async"
         alt="Camron Freeman, owner of Camotive Detailing, smiling in a white shirt" />
     </figure>
     <div className="owner-copy">
