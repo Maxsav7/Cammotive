@@ -71,6 +71,7 @@ export default function MobileMenu({ open, onClose, triggerRef, page, groups }: 
         {item({ href: "/our-work", label: "Our Work" })}
         <a href={googleProfileUrl} target="_blank" rel="noopener noreferrer" onClick={onClose}>Reviews<span className="sr-only"> on Google (opens in a new tab)</span></a>
         {item({ href: "/contact", label: "Contact" })}
+        {item({ href: "/about", label: "About Us" })}
         {item({ href: "/appointment", label: "My appointment" })}
       </nav>
       <div className="menu-foot">
