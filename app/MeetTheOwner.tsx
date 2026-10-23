@@ -1,11 +1,6 @@
 // "Meet the owner" on the About Us page: Camron's portrait and his own words.
 export default function MeetTheOwner() {
   return <section className="section owner" aria-labelledby="owner-heading">
-    <figure className="owner-photo">
-      <img src="/work/camron-owner-640.webp" srcSet="/work/camron-owner-640.webp 640w, /work/camron-owner-1040.webp 1040w"
-        sizes="(max-width: 800px) 100vw, 40vw" width={1040} height={1300} decoding="async"
-        alt="Camron Freeman, owner of Camotive Detailing, smiling in a white shirt" />
-    </figure>
     <div className="owner-copy">
       <p className="eyebrow">Meet the owner</p>
       <h2 id="owner-heading">Driven by detail.</h2>
@@ -16,5 +11,10 @@ export default function MeetTheOwner() {
       <p>Camotive is something I&apos;m building one customer at a time. Every booking, referral, and returning client means a lot to me. Thank you for supporting my business and trusting me with your vehicle.</p>
       <p className="owner-signature"><strong>Camron Freeman</strong><span>Owner, Camotive Detailing</span></p>
     </div>
+    <figure className="owner-photo">
+      <img src="/work/camron-portrait-720.webp" srcSet="/work/camron-portrait-720.webp 720w, /work/camron-portrait-1180.webp 1180w"
+        sizes="(max-width: 800px) calc(100vw - 44px), 42vw" width={1180} height={1475} decoding="async"
+        alt="Camron Freeman, owner of Camotive Detailing, smiling in a white shirt" />
+    </figure>
   </section>;
 }
