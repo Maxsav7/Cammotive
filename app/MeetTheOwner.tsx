@@ -12,7 +12,7 @@ export default function MeetTheOwner() {
       <p className="owner-signature"><strong>Camron Freeman</strong><span>Owner, Camotive Detailing</span></p>
     </div>
     <figure className="owner-photo">
-      <img src="/work/camron-portrait-720.webp" srcSet="/work/camron-portrait-720.webp 720w, /work/camron-portrait-1180.webp 1180w"
+      <img src="/work/camron-freeman-720.webp" srcSet="/work/camron-freeman-720.webp 720w, /work/camron-freeman-1180.webp 1180w"
         sizes="(max-width: 800px) calc(100vw - 44px), 42vw" width={1180} height={1475} decoding="async"
         alt="Camron Freeman, owner of Camotive Detailing, smiling in a white shirt" />
     </figure>
