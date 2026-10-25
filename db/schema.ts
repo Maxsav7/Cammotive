@@ -26,8 +26,9 @@ export const appointments = sqliteTable("appointments", {
 
 // Current bookings. Customer details are AES-GCM encrypted in `details`;
 // email, access token and Cam's admin token are stored only as keyed hashes.
-// A request holds its slot while "pending"; Cam's approval makes it "confirmed";
-// "declined" or "cancelled" releases the slot (see the partial unique index).
+// A new booking holds its slot as "pending" while the customer pays the deposit
+// (see booking_payments.hold_expires); payment makes it "confirmed". "expired" or
+// "cancelled" releases the slot (see the partial unique index).
 export const secureBookings = sqliteTable("secure_bookings", {
   code: text("code").primaryKey(),
   requestKey: text("request_key").notNull().unique(),
@@ -51,6 +52,34 @@ export const secureBookings = sqliteTable("secure_bookings", {
   // One active booking per slot; released slots can be booked again.
   uniqueIndex("secure_bookings_active_slot").on(table.date, table.time).where(sql`status in ('pending', 'confirmed')`),
 ]);
+
+// The Stripe deposit for each online booking. A separate table (rather than new
+// columns) so the migration stays safe to re-run.
+export const bookingPayments = sqliteTable("booking_payments", {
+  code: text("code").primaryKey().references(() => secureBookings.code, { onDelete: "cascade" }),
+  checkoutId: text("checkout_id").notNull().unique(),
+  checkoutUrl: text("checkout_url").notNull(),
+  holdExpires: integer("hold_expires").notNull(),
+  depositCents: integer("deposit_cents").notNull(),
+  paymentIntent: text("payment_intent"),
+  paidAt: integer("paid_at"),
+  refundedAt: integer("refunded_at"),
+  cancelledBy: text("cancelled_by"),
+});
+
+// "My appointments" sign-in: a one-time 6-digit code emailed to the customer
+// (hashed, 15 minutes, 5 tries), then a short session. Keyed by the email's hash.
+export const customerCodes = sqliteTable("customer_codes", {
+  emailHash: text("email_hash").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  expires: integer("expires").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+});
+export const customerSessions = sqliteTable("customer_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  emailHash: text("email_hash").notNull(),
+  expires: integer("expires").notNull(),
+});
 
 // Shared fixed-window rate-limit counters, keyed by HMAC so no raw IP/email is stored.
 export const bookingLimits = sqliteTable("booking_limits", {

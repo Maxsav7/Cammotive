@@ -3,6 +3,7 @@ import { bookingTimes } from "@/lib/booking-catalog";
 import { db, limitRequest } from "@/lib/booking-store";
 import { databaseReady } from "@/lib/booking-db";
 import { failure, HttpError, json, securityReady } from "@/lib/booking-security";
+import { ACTIVE, activeParams } from "@/lib/booking-payments";
 import { busyPeriods, googleCalendarReady, overlaps, slotWindow } from "@/lib/google-calendar";
 
 // Busy times on Cam's Google Calendar, when sync is set up. If Google can't be
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     const { from, days } = parsed.data;
     const to = addDays(from, days - 1);
     const [active, legacy, busy] = await Promise.all([
-      db.prepare("SELECT date, time FROM secure_bookings WHERE date BETWEEN ? AND ? AND status IN ('pending', 'confirmed')").bind(from, to).all(),
+      db.prepare(`SELECT b.date, b.time FROM secure_bookings b WHERE b.date BETWEEN ? AND ? AND ${ACTIVE}`).bind(from, to, ...activeParams()).all(),
       db.prepare("SELECT DISTINCT date FROM appointments WHERE date BETWEEN ? AND ?").bind(from, to).all(),
       calendarBusy(from, to),
     ]);

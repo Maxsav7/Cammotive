@@ -10,4 +10,5 @@ export const d1Api = () => `${testOrigin() ?? "https://api.cloudflare.com"}/clie
 export const turnstileVerifyUrl = () => `${testOrigin() ?? "https://challenges.cloudflare.com"}/turnstile/v0/siteverify`;
 export const resendEmailsUrl = () => `${testOrigin() ?? "https://api.resend.com"}/emails`;
 export const googleTokenUrl = () => `${testOrigin() ?? "https://oauth2.googleapis.com"}/token`;
+export const stripeApi = () => `${testOrigin() ?? "https://api.stripe.com"}/v1`;
 export const googleCalendarApi = () => `${testOrigin() ?? "https://www.googleapis.com"}/calendar/v3`;

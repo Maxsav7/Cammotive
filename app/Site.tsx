@@ -1,10 +1,9 @@
 "use client";
 
 import MeetTheOwner from "./MeetTheOwner";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import WorkGallery from "./WorkGallery";
 import ServiceStories from "./ServiceStories";
-import BookingChallenge from "./BookingChallenge";
 import MobileMenu from "./MobileMenu";
 import TiltCard from "./TiltCard";
 import CoatingShowcase from "./CoatingShowcase";
@@ -13,9 +12,10 @@ import BookingFlow from "./BookingFlow";
 import QuoteForm from "./QuoteForm";
 import ManageBooking from "./ManageBooking";
 import NextOpening from "./NextOpening";
+import MyAppointments from "./MyAppointments";
 import { AfterYouBook, CoatingStory, CorrectionStory, DetailChooser, DetailingStories } from "./ServiceInfo";
 import { googleProfileUrl } from "../lib/links";
-import { depositPercent } from "../lib/booking-catalog";
+import { depositDollars } from "../lib/booking-catalog";
 
 type PackageId = "full" | "premium" | "maintenance" | "ceramic3" | "ceramic5";
 type VehicleSize = "small" | "medium" | "large";
@@ -42,11 +42,6 @@ const addOns = {
 
 const quotePages = ["ceramic-coating", "paint-correction", "quote"];
 
-function formatDate(value: string) {
-  if (!value) return "";
-  return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
-}
-
 export default function Site({ page = "home" }: { page?: string }) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [menu, setMenu] = useState<"services" | null>(null);
@@ -54,28 +49,7 @@ export default function Site({ page = "home" }: { page?: string }) {
   const [category, setCategory] = useState<"detailing" | "ceramic">(page === "ceramic-coating" ? "ceramic" : "detailing");
   const [scrolled, setScrolled] = useState(false);
   const [vehicleSize, setVehicleSize] = useState<VehicleSize>("small");
-  const [lookupCode, setLookupCode] = useState("");
-  const [lookupEmail, setLookupEmail] = useState("");
-  const [lookupError, setLookupError] = useState("");
-  const [lookupResult, setLookupResult] = useState<Record<string, string> | null>(null);
-  const [bookingStatus, setBookingStatus] = useState<{ enabled: boolean; siteKey?: string } | null>(null);
-  const [botToken, setBotToken] = useState("");
-  const [challengeVersion, setChallengeVersion] = useState(0);
-  const [busy, setBusy] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (page !== "appointment") return;
-    fetch("/api/appointments/status", { cache: "no-store" }).then(r => r.json()).then(setBookingStatus).catch(() => setBookingStatus({ enabled: false }));
-    const access = new URLSearchParams(window.location.hash.slice(1)).get("access");
-    if (access) {
-      window.history.replaceState(null, "", window.location.pathname);
-      if (!/^[a-f0-9]{64}$/.test(access)) { queueMicrotask(() => setLookupError("Invalid access link.")); return; }
-      fetch("/api/appointments", { headers: { Authorization: `Bearer ${access}` }, cache: "no-store" })
-        .then(async r => { const result = await r.json(); if (!r.ok) throw new Error(result.error); setLookupResult(result.appointment); })
-        .catch(() => setLookupError("This link is unavailable or expired. Request a new one below, or call Camotive."));
-    }
-  }, [page]);
 
   useEffect(() => {
     try {
@@ -96,18 +70,6 @@ export default function Site({ page = "home" }: { page?: string }) {
     try { window.localStorage.setItem("camotive-theme", next); } catch {}
   }
 
-  async function lookupAppointment(event: FormEvent) {
-    event.preventDefault();
-    if (busy || !botToken) return;
-    setBusy(true); setLookupResult(null);
-    try {
-      const response = await fetch("/api/appointments/access", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: lookupCode, email: lookupEmail, turnstileToken: botToken }) });
-      const result = await response.json();
-      setLookupError(result.message || result.error || "Please call Camotive for help.");
-    } catch { setLookupError("Unable to request a link. Please call Camotive."); }
-    finally { setBusy(false); setBotToken(""); setChallengeVersion(v => v + 1); }
-  }
-
   const isHome = page === "home";
   const areas = [["stone-oak", "Stone Oak"], ["alamo-heights", "Alamo Heights"], ["the-dominion", "The Dominion"], ["leon-springs", "Leon Springs"], ["downtown", "Downtown San Antonio"]];
   const currentArea = areas.find(([slug]) => slug === page);
@@ -120,16 +82,16 @@ export default function Site({ page = "home" }: { page?: string }) {
     reviews: ["What our customers say.", "Rated 5.0 on Google. Read what our customers say about their detail."],
     about: ["About us.", "Camotive is a mobile detailing business in San Antonio, owned and run by Camron Freeman."],
     contact: ["Let's talk about your vehicle.", "Questions about a service, your location or your paint? Call or text us directly."],
-    book: ["Book your detail.", "Choose a detail and pick an open time. Your booking is confirmed instantly by email."],
+    book: ["Book your detail.", "Choose your detail and add-ons, pick an open time, and pay a ${depositDollars} deposit to confirm it."],
     quote: ["Request a quote.", "Ceramic coating and paint correction are quoted after we understand your vehicle. Tell us about it and we'll reply within one business day."],
-    appointment: ["Your detail, at a glance.", "Open the private link from your email, or request a new one."],
+    appointment: ["My appointments.", "See every detail you've booked with us, or cancel an upcoming one. We'll email you a code to sign in."],
   };
   const title = currentArea ? [`Mobile detailing in ${currentArea[1]}.`, "Professional interior and exterior care at your home or workplace, plus ceramic protection and paint correction by quote."] : titles[page];
   // Breadcrumb trail after "Home": the current page, or Service area > neighborhood.
   const pageNames: Record<string, string> = {
     "mobile-detailing": "Detailing", "ceramic-coating": "Ceramic Coating", "paint-correction": "Paint Correction",
     locations: "Service area", "our-work": "Our Work", reviews: "Reviews", contact: "Contact", about: "About Us",
-    book: "Book a detail", quote: "Request a quote", appointment: "My appointment",
+    book: "Book a detail", quote: "Request a quote", appointment: "My appointments",
   };
   const crumbs: [string, string?][] = currentArea ? [["Service area", "/locations"], [currentArea[1]]] : [[pageNames[page] ?? ""]];
   const navLinks = [
@@ -144,7 +106,7 @@ export default function Site({ page = "home" }: { page?: string }) {
 
   const pricing = <section className="section pricing-section" id="pricing">
     <div className="section-heading"><p className="eyebrow">Pricing</p><h2>Clear prices, before you book.</h2><p>Choose your vehicle size to see starting prices. We confirm the final price before work begins.</p></div>
-    <div className="pricing-notice">Mobile service anywhere in San Antonio. A {depositPercent}% deposit is collected on site before work begins. <a href="/book">Book a detail</a></div>
+    <div className="pricing-notice">Mobile service anywhere in San Antonio. A ${depositDollars} deposit, paid when you book, confirms your time and goes toward your total. <a href="/book">Book a detail</a></div>
     <div className="pricing-step"><span>1</span><div><h3>Choose a service</h3><p>Detailing is booked online. Coatings are quoted first.</p></div></div>
     <div className="category-tabs" role="tablist" aria-label="Service category">
       <button id="detail-tab" role="tab" aria-selected={category === "detailing"} aria-controls="packages-panel" tabIndex={category === "detailing" ? 0 : -1} onKeyDown={e => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setCategory("ceramic"); document.getElementById("ceramic-tab")?.focus(); } }} className={category === "detailing" ? "selected" : ""} onClick={() => setCategory("detailing")}><strong>Detailing</strong><small>Book online</small></button>
@@ -168,8 +130,8 @@ export default function Site({ page = "home" }: { page?: string }) {
   const faq = <section className="faq section" id="faq">
     <div className="faq-heading"><p className="eyebrow">Before we arrive</p><h2>Good to know.</h2><p>Everything you need before your mobile detail.</p></div>
     <div className="faq-list">
-      <details><summary>How does online booking work?<span>+</span></summary><p>You choose a detail and an open time and book it. It&apos;s confirmed instantly, and the confirmation email includes a calendar invite. You&apos;ll get a reminder the day before.</p></details>
-      <details><summary>Is there a deposit?<span>+</span></summary><p>Nothing is charged online. A {depositPercent}% deposit is collected on site before work begins, and the rest when the detail is done.</p></details>
+      <details><summary>How does online booking work?<span>+</span></summary><p>Choose your detail and any add-ons, pick an open time, and pay the ${depositDollars} deposit on a secure Stripe checkout. That confirms your booking right away: the confirmation email has a calendar invite, and you&apos;ll get a reminder the day before. To see your bookings or cancel one, go to My appointments and we&apos;ll email you a sign-in code.</p></details>
+      <details><summary>Is there a deposit?<span>+</span></summary><p>Yes. A ${depositDollars} deposit is paid online when you book, which confirms your time. It goes toward your total, and the rest is paid when the detail is done. If you cancel, the deposit is non-refundable. If we ever have to cancel, we refund it in full.</p></details>
       <details><summary>How long does a Full Detail take?<span>+</span></summary><p>About 3–4 hours. Larger vehicles, add-ons and heavier soiling can take longer; we'll tell you before starting.</p></details>
       <details><summary>Do you need water or electricity?<span>+</span></summary><p>Please have an outdoor water connection and a power outlet within reach of the vehicle. If that isn&apos;t possible, call or text before booking so we can confirm what your location needs.</p></details>
       <details><summary>Can you detail at my apartment or office?<span>+</span></summary><p>Yes, as long as we can access the spot and the property allows it. Please arrange gate codes and any HOA, apartment or building permission in advance.</p></details>
@@ -230,12 +192,7 @@ export default function Site({ page = "home" }: { page?: string }) {
         {page === "book" && <section className="booking section" id="booking"><BookingFlow /></section>}
         {page === "quote" && <section className="section quote-section"><QuoteForm /></section>}
         {page === "manage" && <ManageBooking />}
-        {page === "appointment" && <section className="appointment section" id="appointment">
-          <div><h2>Find your appointment.</h2><p>Open the private link in your email, or request another using your reference and booking email. For older six-character references, call Camotive.</p></div>
-          {bookingStatus?.enabled ? <form onSubmit={lookupAppointment}><label>Reference<input maxLength={16} value={lookupCode} onChange={event => setLookupCode(event.target.value.toUpperCase())} placeholder="CAM-123456ABCDEF" required /></label><label>Booking email<input type="email" maxLength={254} value={lookupEmail} onChange={event => setLookupEmail(event.target.value)} required /></label><BookingChallenge key={challengeVersion} siteKey={bookingStatus.siteKey!} action="recovery" onToken={setBotToken} /><button className="button" disabled={busy || !botToken}>{busy ? "Requesting…" : "Email my private link"}</button></form> : <p>For appointment help, <a className="text-link" href="tel:+12105730671">call (210) 573-0671</a>.</p>}
-          {lookupError && <p className="lookup-error" role="status">{lookupError}</p>}
-          {lookupResult && <div className="lookup-card"><p className={`status-pill status-${lookupResult.status}`}>{lookupResult.status === "confirmed" ? "Confirmed" : lookupResult.status === "pending" ? "Waiting for confirmation" : lookupResult.status === "cancelled" ? "Cancelled" : lookupResult.status === "declined" ? "Not booked: we couldn't take this time" : lookupResult.status}</p><div><small>{lookupResult.package_name}</small><strong>{formatDate(lookupResult.date)}, {lookupResult.time}</strong><p>{lookupResult.vehicle}. Estimate ${lookupResult.total}.</p></div></div>}
-        </section>}
+        {page === "appointment" && <MyAppointments />}
         {(isHome || ["mobile-detailing", "locations"].includes(page) || currentArea) && faq}
         {page !== "manage" && <section className="final-cta">{/* The CLA also appears in the gallery and coating showcase; don't show it twice. */}{!["our-work", "ceramic-coating"].includes(page) && <img src="/work/mercedes-cla-rear.jpg" alt="" loading="lazy" decoding="async" />}
           {quoteCta && page !== "quote" ? <><h2>Ready for a quote?</h2><p>Tell us about your vehicle and what you&apos;d like. We reply within one business day.</p><div className="hero-actions"><a className="button" href={`/quote?service=${page === "paint-correction" ? "correction" : "ceramic"}`}>Request a quote</a><a className="outline-button" href="sms:+12105730671">Text us photos</a></div></>

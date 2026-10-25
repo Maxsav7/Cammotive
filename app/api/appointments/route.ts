@@ -1,25 +1,41 @@
 import { bookingSchema, estimate } from "@/lib/booking-validation";
 import { db, requireBooking, limitRequest, limit } from "@/lib/booking-store";
-import { digest, failure, HttpError, json, readJson, seal, token, unseal, verifyBot } from "@/lib/booking-security";
-import { emailJobs, sendQueuedEmailsSoon, type OutboxJob } from "@/lib/booking-outbox";
-import { bookedEmail, camBookingEmail, type BookingDetails } from "@/lib/booking-emails";
-import { googleCalendarReady, slotBusyOnCalendar } from "@/lib/google-calendar";
+import { configuredOrigin, digest, failure, HttpError, json, readJson, seal, token } from "@/lib/booking-security";
+import { verifyBot } from "@/lib/booking-security";
+import type { BookingDetails } from "@/lib/booking-emails";
+import { slotBusyOnCalendar } from "@/lib/google-calendar";
+import { ACTIVE, activeParams, camToken, customerToken, releaseStaleHolds } from "@/lib/booking-payments";
+import { createDepositCheckout } from "@/lib/stripe";
+import { depositDollars, holdMinutes } from "@/lib/booking-catalog";
+import { longDate } from "@/lib/booking-emails";
 
 const TAKEN = "That time was just taken. Please choose another slot.";
 
 async function slotTaken(date: string, time: string) {
-  return Boolean(await db.prepare(`SELECT 1 AS taken FROM secure_bookings WHERE date = ? AND time = ? AND status IN ('pending', 'confirmed')
-    UNION SELECT 1 FROM appointments WHERE date = ?`).bind(date, time, date).first());
+  return Boolean(await db.prepare(`SELECT 1 AS taken FROM secure_bookings b WHERE b.date = ? AND b.time = ? AND ${ACTIVE}
+    UNION SELECT 1 FROM appointments WHERE date = ?`).bind(date, time, ...activeParams(), date).first());
 }
 
-// A customer books an open detailing slot. Bookings are confirmed instantly: the
-// customer gets a confirmation with a calendar invite, Cam gets a notification
-// with a private link to cancel if needed, and (when configured) the booking is
-// added to Cam's Google Calendar. Slots that are busy on that calendar can't be booked.
+// What a retried request (same Idempotency-Key) gets back: the same payment page
+// while the hold is live, or the booking's outcome. Never PII or tokens.
+async function replay(requestKey: string, fingerprint: string, calculated: object) {
+  const row = await db.prepare(`SELECT b.code, b.fingerprint, b.status, p.checkout_url, p.hold_expires FROM secure_bookings b
+    LEFT JOIN booking_payments p ON p.code = b.code WHERE b.request_key = ?`).bind(requestKey).first();
+  if (!row) return null;
+  if (row.fingerprint !== fingerprint) throw new HttpError(409, "This request key was already used. Start a new booking.");
+  if (row.status === "confirmed") return json({ confirmationCode: row.code, ...calculated, deposit: depositDollars, status: "confirmed" });
+  if (row.status === "pending" && row.checkout_url && Number(row.hold_expires) > Date.now() / 1000)
+    return json({ confirmationCode: row.code, ...calculated, deposit: depositDollars, status: "pending", checkoutUrl: row.checkout_url });
+  throw new HttpError(409, "This booking wasn't paid in time, so the slot was released. Please choose a time again.");
+}
+
+// A customer books a detailing slot. The slot is held for 30 minutes while they pay
+// the deposit on Stripe's Checkout page; payment confirms it (see the Stripe
+// webhook), and only then are the confirmation emails and calendar event sent.
 export async function POST(request: Request) {
   try {
     requireBooking();
-    await limitRequest(request, "create", 5);
+    await limitRequest(request, "create", 10);
     const parsed = bookingSchema.safeParse(await readJson(request));
     if (!parsed.success) throw new HttpError(400, "Please check your service, date and contact details.");
     const requestKey = request.headers.get("idempotency-key");
@@ -27,82 +43,55 @@ export async function POST(request: Request) {
     const { turnstileToken, ...details } = parsed.data;
     const fingerprint = await digest(JSON.stringify(details));
     const calculated = estimate(parsed.data);
-    const existing = await db.prepare("SELECT code, fingerprint, status FROM secure_bookings WHERE request_key = ?").bind(requestKey).first();
-    // A retried request returns the original result without PII or tokens.
-    if (existing) {
-      if (existing.fingerprint !== fingerprint) throw new HttpError(409, "This request key was already used. Start a new booking.");
-      return json({ confirmationCode: existing.code, ...calculated, status: existing.status, notificationStatus: "queued" });
-    }
-    // A retry of this same request may have just taken the slot itself.
-    const replayOrTaken = async () => {
-      const replay = await db.prepare("SELECT code, fingerprint, status FROM secure_bookings WHERE request_key = ?").bind(requestKey).first();
-      if (replay?.fingerprint === fingerprint) return json({ confirmationCode: replay.code, ...calculated, status: replay.status, notificationStatus: "queued" });
-      if (replay) throw new HttpError(409, "This request key was already used. Start a new booking.");
-      return null;
-    };
-    if (await slotTaken(details.date, details.time)) { const replay = await replayOrTaken(); if (replay) return replay; throw new HttpError(409, TAKEN); }
+    const previous = await replay(requestKey, fingerprint, calculated);
+    if (previous) return previous;
+    await releaseStaleHolds(details.date, details.time);
+    if (await slotTaken(details.date, details.time)) throw new HttpError(409, TAKEN);
     if (await slotBusyOnCalendar(details.date, details.time)) throw new HttpError(409, TAKEN);
     await verifyBot(turnstileToken, "booking");
-    await limit("recipient-email", details.email, 3, 86400);
-    await limit("recipient-phone", details.phone, 3, 86400);
-    await limit("booking-budget", "global", 20, 86400);
+    await limit("recipient-email", details.email, 4, 86400);
+    await limit("recipient-phone", details.phone, 4, 86400);
+    await limit("booking-budget", "global", 30, 86400);
     const now = Math.floor(Date.now() / 1000);
     const code = `CAM-${token().slice(0, 12).toUpperCase()}`;
-    const accessToken = token();
-    const adminToken = token();
     const record: BookingDetails & Record<string, unknown> = { ...details, ...calculated };
-    const jobs: [string, OutboxJob][] = [
-      [`${code}-booked`, bookedEmail(code, record, accessToken)],
-      [`${code}-cam`, camBookingEmail(code, record, adminToken)],
-    ];
-    if (googleCalendarReady()) jobs.push([`${code}-calendar`, { kind: "calendar", op: "create", event: {
-      code, date: details.date, time: details.time, title: `${calculated.packageName}: ${details.name}`, location: details.address,
-      description: [`${calculated.packageName}${calculated.addOns ? ` + ${calculated.addOns}` : ""}`, `Estimate $${calculated.total}`, "",
-        details.name, details.phone, details.email, details.vehicle, "", `Reference ${code}. Booked online at Camotive.`].join("\n"),
-    } }]);
-    const emails = await emailJobs(code, jobs);
-    // Two single-statement writes (each atomic) rather than a batch, because the D1
-    // REST API used on Vercel doesn't document batches as transactional. If queuing
-    // the notifications fails, the booking is removed so nobody is left unnotified.
-    let inserted;
+    // 1. Hold the slot. The partial unique index makes this atomic: of two people
+    //    racing for one slot, exactly one insert succeeds.
+    let held;
     try {
-      inserted = await db.prepare(`INSERT INTO secure_bookings
-        (code, request_key, fingerprint, date, time, status, email_hash, details, token_hash, token_expires, admin_token_hash, decided_at, created_at, delete_after)
-        SELECT ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM appointments WHERE date = ?) RETURNING code`)
+      held = await db.prepare(`INSERT INTO secure_bookings
+        (code, request_key, fingerprint, date, time, status, email_hash, details, token_hash, token_expires, admin_token_hash, created_at, delete_after)
+        SELECT ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM appointments WHERE date = ?) RETURNING code`)
         .bind(code, requestKey, fingerprint, details.date, details.time, await digest(details.email), await seal(record),
-          await digest(accessToken), now + 86400, await digest(adminToken), now, now,
-          Math.floor(Date.parse(details.date + "T23:59:59Z") / 1000) + 90 * 86400, details.date).first();
+          await digest(await customerToken(code)), Math.floor(Date.parse(details.date + "T23:59:59Z") / 1000) + 30 * 86400,
+          await digest(await camToken(code)), now, Math.floor(Date.parse(details.date + "T23:59:59Z") / 1000) + 400 * 86400, details.date).first();
     } catch (error) {
-      const replay = await replayOrTaken();
-      if (replay) return replay;
+      const again = await replay(requestKey, fingerprint, calculated);
+      if (again) return again;
       if (await slotTaken(details.date, details.time)) throw new HttpError(409, TAKEN);
       throw error;
     }
-    if (!inserted) throw new HttpError(409, TAKEN);
+    if (!held) throw new HttpError(409, TAKEN);
+    // 2. Create the deposit payment. If anything fails, release the hold.
     try {
-      await emails.run();
+      const origin = configuredOrigin()!;
+      const expiresAt = now + holdMinutes * 60 + 60; // Stripe needs at least 30 minutes
+      const releaseToken = (await digest(`release:${code}`)).slice(0, 32);
+      const session = await createDepositCheckout({
+        code, email: details.email, amountCents: depositDollars * 100,
+        title: `Deposit: ${calculated.packageName.replace(" · ", ", ")}`,
+        description: `${longDate(details.date)} at ${details.time}. Goes toward your total; non-refundable if you cancel.`,
+        successUrl: `${origin}/book?paid={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${origin}/book?unpaid=${code}&release=${releaseToken}`,
+        expiresAt,
+      });
+      if (!session.url) throw new Error("Checkout has no URL");
+      await db.prepare("INSERT INTO booking_payments (code, checkout_id, checkout_url, hold_expires, deposit_cents) VALUES (?, ?, ?, ?, ?)")
+        .bind(code, session.id, session.url, expiresAt + 300, depositDollars * 100).run();
+      return json({ confirmationCode: code, ...calculated, deposit: depositDollars, status: "pending", checkoutUrl: session.url }, 201);
     } catch (error) {
-      await db.prepare("DELETE FROM secure_bookings WHERE code = ?").bind(code).run().catch(() => {});
+      await db.prepare("DELETE FROM secure_bookings WHERE code = ? AND status = 'pending'").bind(code).run().catch(() => {});
       throw error;
     }
-    sendQueuedEmailsSoon();
-    return json({ confirmationCode: code, ...calculated, status: "confirmed", notificationStatus: "queued" }, 201);
-  } catch (error) { return failure(error); }
-}
-
-// The customer's private link (token in the Authorization header) shows the
-// booking and its status. Address, email and phone are never returned.
-export async function GET(request: Request) {
-  try {
-    requireBooking();
-    await limitRequest(request, "lookup", 30);
-    const authorization = request.headers.get("authorization") ?? "";
-    if (!/^Bearer [a-f0-9]{64}$/.test(authorization)) throw new HttpError(401, "Open the private link sent to your email.");
-    const row = await db.prepare("SELECT code, date, time, status, details FROM secure_bookings WHERE token_hash = ? AND token_expires > ?")
-      .bind(await digest(authorization.slice(7)), Math.floor(Date.now() / 1000)).first();
-    if (!row) throw new HttpError(401, "This link is invalid or expired. Request a new email link.");
-    const details = await unseal(String(row.details));
-    return json({ appointment: { confirmation_code: row.code, date: row.date, time: row.time, status: row.status,
-      package_name: details.packageName, total: details.total, vehicle: details.vehicle } });
   } catch (error) { return failure(error); }
 }

@@ -128,9 +128,11 @@ test("unknown pages return 404", async () => {
 });
 
 test("unconfigured booking fails closed on either runtime", async () => {
-  for (const options of [{ method: "GET" }, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }]) {
-    const response = await fetch(`${origin}/api/appointments?code=CAM-TEST`, options);
-    assert.equal(response.status, 503);
+  const json = { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" };
+  for (const [path, options] of [["/api/appointments", json], ["/api/stripe/webhook", json], ["/api/account/code", json], ["/api/account/session", json],
+    ["/api/account/appointments", { method: "GET" }], ["/api/checkout?session_id=cs_test_aaaaaaaaaaaa", { method: "GET" }]]) {
+    const response = await fetch(`${origin}${path}`, options);
+    assert.equal(response.status, 503, path);
     const body = await response.json();
     assert.match(body.error, /temporarily unavailable/);
     assert.equal(body.confirmationCode, undefined);

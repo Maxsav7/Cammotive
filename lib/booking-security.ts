@@ -1,4 +1,5 @@
 import { testMode, turnstileVerifyUrl } from "./providers";
+import { stripeReady } from "./stripe";
 export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -23,7 +24,7 @@ export function securityReady() {
   return process.env.BOOKING_ENABLED === "true" && process.env.BOOKING_SCHEDULER_READY === "true" && Boolean(configuredOrigin() && process.env.TURNSTILE_SECRET_KEY &&
     process.env.TURNSTILE_SITE_KEY && process.env.RESEND_API_KEY && process.env.BOOKING_FROM_EMAIL && process.env.CAM_BOOKING_EMAIL &&
     /^[a-f0-9]{64}$/i.test(process.env.BOOKING_ENCRYPTION_KEY ?? "") &&
-    (process.env.BOOKING_HASH_SECRET?.length ?? 0) >= 32 && (process.env.BOOKING_CRON_SECRET?.length ?? 0) >= 32);
+    (process.env.BOOKING_HASH_SECRET?.length ?? 0) >= 32 && (process.env.BOOKING_CRON_SECRET?.length ?? 0) >= 32 && stripeReady());
 }
 export async function readJson(request: Request) {
   if (request.headers.get("origin") !== configuredOrigin()) throw new HttpError(403, "Request origin is not allowed.");

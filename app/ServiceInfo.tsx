@@ -2,7 +2,7 @@
 // Service stories: what each service is, what it fixes, what it won't, how long it
 // takes and how to look after the result. Plus the chooser and the booking timeline.
 import { useState } from "react";
-import { depositPercent } from "../lib/booking-catalog";
+import { depositDollars } from "../lib/booking-catalog";
 
 type Fact = [label: string, text: string];
 function Story({ id, eyebrow, title, intro, photo, alt, facts, action, reverse = false }: {
@@ -88,12 +88,12 @@ export function DetailChooser() {
 
 export function AfterYouBook() {
   return <section className="section after-you-book" aria-labelledby="after-heading">
-    <div className="section-heading"><p className="eyebrow">How booking works</p><h2 id="after-heading">What happens after you book.</h2><p>Open times book instantly, and nothing is charged online.</p></div>
+    <div className="section-heading"><p className="eyebrow">How booking works</p><h2 id="after-heading">What happens when you book.</h2><p>Pick an open time and a ${depositDollars} deposit confirms it. The rest is paid when the detail is done.</p></div>
     <ol className="timeline">
-      <li><span>1</span><h3>Book</h3><p>Choose a detail and an open time. Only times we can actually make are shown, so it&apos;s booked the moment you confirm.</p></li>
-      <li><span>2</span><h3>Confirmation</h3><p>Your confirmation email arrives right away, with a calendar invite and a link to view your appointment.</p></li>
-      <li><span>3</span><h3>Reminder</h3><p>The day before, a reminder email with your time, address and what to have ready.</p></li>
-      <li><span>4</span><h3>Your detail</h3><p>We arrive at your slot. A {depositPercent}% deposit is collected on site before work begins.</p></li>
+      <li><span>1</span><h3>Choose</h3><p>Pick your detail, any add-ons, and an open time. Only times we can actually make are shown.</p></li>
+      <li><span>2</span><h3>Pay the deposit</h3><p>A ${depositDollars} deposit on Stripe&apos;s secure checkout confirms your booking. It goes toward your total.</p></li>
+      <li><span>3</span><h3>Confirmation</h3><p>Your confirmation email arrives right away, with a calendar invite. A reminder follows the day before.</p></li>
+      <li><span>4</span><h3>Your detail</h3><p>We arrive at your slot. Need to cancel? Do it from My appointments; the deposit is non-refundable.</p></li>
     </ol>
     <a className="button" href="/book">Book a detail</a>
   </section>;

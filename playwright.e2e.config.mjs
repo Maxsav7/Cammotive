@@ -7,6 +7,7 @@ import { generateKeyPairSync, randomBytes } from "node:crypto";
 const port = 4187;
 const fakes = 4186;
 const launchOptions = process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {};
+const stripeWebhookSecret = `whsec_${randomBytes(16).toString("hex")}`;
 const secret = () => randomBytes(32).toString("hex");
 // A throwaway service-account key: the app signs with the private half, the fake
 // Google checks the signature with the public half.
@@ -28,7 +29,7 @@ export default defineConfig({
   ],
   webServer: [
     { command: "node tests/e2e/fake-providers.mjs", url: `http://127.0.0.1:${fakes}/__health`, reuseExistingServer: false,
-      env: { FAKE_PROVIDER_PORT: String(fakes), FAKE_GOOGLE_PUBLIC_KEY: google.publicKey, FAKE_GOOGLE_BUSY: JSON.stringify(busy) } },
+      env: { FAKE_PROVIDER_PORT: String(fakes), FAKE_STRIPE_WEBHOOK_URL: `http://127.0.0.1:${port}/api/stripe/webhook`, FAKE_STRIPE_WEBHOOK_SECRET: stripeWebhookSecret, FAKE_GOOGLE_PUBLIC_KEY: google.publicKey, FAKE_GOOGLE_BUSY: JSON.stringify(busy) } },
     {
       command: `node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port ${port}`,
       url: `http://127.0.0.1:${port}`, reuseExistingServer: false, timeout: 60000,
@@ -41,6 +42,7 @@ export default defineConfig({
         // Stored the way Vercel often keeps it: one line with literal "\n".
         GOOGLE_SERVICE_ACCOUNT_EMAIL: "camotive@test.iam.gserviceaccount.com", GOOGLE_SERVICE_ACCOUNT_KEY: google.privateKey.replace(/\n/g, "\\n"),
         GOOGLE_CALENDAR_ID: "cam@example.com",
+        STRIPE_SECRET_KEY: "sk_test_fakeprovider000", STRIPE_WEBHOOK_SECRET: stripeWebhookSecret,
       },
     },
   ],

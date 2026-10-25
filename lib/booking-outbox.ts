@@ -23,7 +23,6 @@ export async function emailJobs(code: string | null, jobs: [id: string, job: Out
   return db.prepare(`INSERT INTO booking_outbox (id, booking_code, payload, next_attempt, deadline) VALUES ${jobs.map(() => "(?, ?, ?, ?, ?)").join(", ")}`)
     .bind(...params);
 }
-export { accessEmail } from "./booking-emails";
 export async function dispatchEmails(maximum = 5) {
   let sent = 0;
   for (let i = 0; i < maximum; i++) {

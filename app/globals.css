@@ -777,3 +777,58 @@ p { text-wrap: pretty; }
   .done-summary dd { margin: 0; text-align: right; }
 }
 .convenience-grid > a > div { padding: 26px 24px 28px; }
+
+/* ---------- Booking: five steps, add-ons step, deposit ---------- */
+.booking-progress { grid-template-columns: repeat(5, 1fr); }
+.booking-notice { margin: 0; padding: 14px 44px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, #e8c872 10%, var(--surface)); font-size: 15px; }
+.step-intro { margin: -12px 0 20px; color: var(--muted); font-size: 15px; }
+.addon-grid label.selected { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); background: var(--soft); }
+.deposit-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 22px 0 0; border-radius: 16px; border: 1px solid var(--line); overflow: hidden; }
+.deposit-summary > div { padding: 16px 18px; border-right: 1px solid var(--line); }
+.deposit-summary > div:last-child { border-right: 0; }
+.deposit-summary > div:nth-child(2) { background: var(--soft); }
+.deposit-summary dt { font-size: 13px; color: var(--muted); }
+.deposit-summary dd { margin: 4px 0 0; font-size: 22px; font-weight: 620; font-stretch: 110%; }
+.agree { display: flex; gap: 12px; align-items: flex-start; margin: 4px 0 18px; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line-strong); font-size: 15px; line-height: 1.5; cursor: pointer; }
+.agree input { flex: none; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--text); }
+.done-manage { margin-top: 26px; color: var(--muted); font-size: 15px; }
+
+/* ---------- My appointments ---------- */
+.my-appointments { padding-top: 64px; }
+.signin-card { max-width: 520px; display: grid; gap: 16px; padding: 32px; border-radius: 22px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--panel-edge); }
+.signin-card h2 { font-size: 28px; }
+.signin-card > p { color: var(--muted); }
+.signin-card label { display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--muted); }
+.signin-card input { min-height: 50px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text); font-size: 16px; }
+.signin-card .code-input { max-width: 220px; font-size: 26px; letter-spacing: .35em; font-variant-numeric: tabular-nums; text-align: center; }
+.signin-card .text-button { justify-self: start; }
+.appointment-list { max-width: 860px; display: grid; gap: 16px; }
+.appointment-list-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.appointment-list-head h2 { font-size: clamp(28px, 3vw, 38px); }
+.appointment-group { margin-top: 18px; font-size: 15px; font-weight: 600; font-stretch: 100%; letter-spacing: 0; color: var(--muted); }
+.appointment-card { display: grid; gap: 14px; padding: 24px 26px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--panel-edge); }
+.appointment-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.appointment-card-head small { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.appointment-card h3 { font-size: 22px; }
+.appointment-card dl { margin: 0; display: grid; gap: 8px; }
+.appointment-card dl > div { display: grid; grid-template-columns: 110px 1fr; gap: 12px; font-size: 15px; }
+.appointment-card dt { color: var(--muted); }
+.appointment-card dd { margin: 0; overflow-wrap: anywhere; }
+.appointment-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; }
+.status-past::before { background: var(--muted); }
+.empty-note, .policy-note { color: var(--muted); font-size: 15px; }
+.policy-note { margin-top: 12px; }
+
+@media (max-width: 800px) {
+  .booking-notice { padding: 14px 22px; }
+  .deposit-summary { grid-template-columns: 1fr; }
+  .deposit-summary > div { display: flex; align-items: baseline; justify-content: space-between; border-right: 0; border-bottom: 1px solid var(--line); }
+  .deposit-summary > div:last-child { border-bottom: 0; }
+  .deposit-summary dd { font-size: 18px; margin: 0; }
+}
+@media (max-width: 540px) {
+  .booking-progress li small { font-size: 10.5px; }
+  .signin-card { padding: 24px 20px; }
+  .appointment-card { padding: 20px; }
+  .appointment-card dl > div { grid-template-columns: 1fr; gap: 2px; }
+}

@@ -40,7 +40,7 @@ export function appointmentIcs({ code, date, time, service, address, cancelled =
     `DTEND:${stamp(end)}`,
     `SUMMARY:${escape(`${cancelled ? "Cancelled: " : ""}Camotive mobile detail: ${service}`)}`,
     `LOCATION:${escape(address)}`,
-    `DESCRIPTION:${escape(`Reference ${code}. We arrive at ${time}. Please have water and power within reach. A 10% deposit is collected on site before work begins. Questions: (210) 573-0671.`)}`,
+    `DESCRIPTION:${escape(`Reference ${code}. We arrive at ${time}. Please have water and power within reach. Deposit paid; the balance is due when the detail is done. Questions: (210) 573-0671.`)}`,
     ...(cancelled ? [] : ["BEGIN:VALARM", "TRIGGER:-P1D", "ACTION:DISPLAY", "DESCRIPTION:Camotive detail tomorrow", "END:VALARM"]),
     "END:VEVENT", "END:VCALENDAR",
   ];

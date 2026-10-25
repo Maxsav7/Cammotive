@@ -14,13 +14,17 @@ export const bookingTimes = ["8:00 AM", "1:00 PM"] as const;
 // Start time in 24h form, used for calendar invites and reminders.
 export const slotStart = { "8:00 AM": "08:00", "1:00 PM": "13:00" } as const;
 export const slotHours = 4;
-// Booked online; everything else is quoted by Cam first.
+// Booked online; everything else is quoted first.
 export const bookablePackages = ["full", "premium", "maintenance"] as const;
 export const quoteServices = {
   ceramic: "Ceramic coating",
   correction: "Paint correction",
   other: "Something else",
 } as const;
-export const depositPercent = 10;
+// Paid online when booking. It goes toward the total and is kept if the customer
+// cancels; it's refunded if Camotive has to cancel.
+export const depositDollars = 50;
+// How long a slot is held while the customer pays (Stripe's minimum is 30 minutes).
+export const holdMinutes = 30;
 // Furthest date that can be requested online.
 export const bookingWindowDays = 90;

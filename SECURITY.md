@@ -62,6 +62,23 @@ API returns 503 and the UI shows the call/text alternative.
 | `RESEND_API_KEY` | Scoped sending credential |
 | `BOOKING_FROM_EMAIL` | Verified sender |
 | `CAM_BOOKING_EMAIL` | Owner notification mailbox |
+| `STRIPE_SECRET_KEY` | Stripe secret (or restricted) key: Checkout Sessions and Refunds |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret of the `/api/stripe/webhook` endpoint |
+
+### Payments and customer sign-in
+
+- Customers pay on Stripe's hosted Checkout page; no card data reaches this
+  site. The deposit amount is fixed on the server (`depositDollars`), never
+  taken from the request.
+- A booking is confirmed only by a Stripe-signed webhook (HMAC-SHA256 over the
+  raw body, 5-minute timestamp tolerance, constant-time comparison) or by the
+  server asking Stripe for the Checkout Session itself. Webhooks are idempotent.
+- My appointments uses a one-time 6-digit code sent to the booking email (stored
+  as a keyed hash, 15-minute expiry, 5 attempts, rate-limited per address and
+  IP, identical responses whether or not the email has bookings), then a
+  1-hour session token held only in the browser tab. The link in the
+  confirmation email is a keyed hash of the booking code and signs in the same way.
+- Customers can only see and cancel bookings made with their own email.
 
 Vercel additionally requires `CLOUDFLARE_ACCOUNT_ID`,
 `CLOUDFLARE_D1_DATABASE_ID`, and `CLOUDFLARE_D1_API_TOKEN`. Use the narrowest
