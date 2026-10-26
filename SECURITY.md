@@ -79,6 +79,12 @@ API returns 503 and the UI shows the call/text alternative.
   1-hour session token held only in the browser tab. The link in the
   confirmation email is a keyed hash of the booking code and signs in the same way.
 - Customers can only see and cancel bookings made with their own email.
+- Cam's dashboard (/admin) uses the same emailed-code sign-in, but only for
+  `CAM_BOOKING_EMAIL` / `ADMIN_EMAILS`, with codes and sessions keyed separately
+  from customers' (a customer session can never open it). Sessions last 7 days
+  and end immediately if the address is removed from the settings. Every
+  dashboard request re-checks the session; actions are origin-checked and
+  validated server-side. Treat the owner mailbox as an admin credential (2FA).
 
 Vercel additionally requires `CLOUDFLARE_ACCOUNT_ID`,
 `CLOUDFLARE_D1_DATABASE_ID`, and `CLOUDFLARE_D1_API_TOKEN`. Use the narrowest

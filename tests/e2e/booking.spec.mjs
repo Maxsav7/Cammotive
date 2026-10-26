@@ -208,3 +208,63 @@ test("the homepage shows the next open time and links to it", async ({ page }) =
   await page.getByRole("button", { name: "Skip: choose a time" }).click();
   await expect(page.locator(".slot-list button.selected")).toHaveCount(1);
 });
+
+test("Cam's dashboard: sign in with an emailed code, move a job, block a day, reply to quotes", async ({ page, request }, testInfo) => {
+  const email = `dash-${testInfo.project.name}@example.com`;
+  await bookUntilCheckout(page, email, { service: "full", addOn: false });
+  await page.getByRole("button", { name: "Pay $50.00" }).click();
+  await expect(page.getByRole("heading", { name: "You're booked." })).toBeVisible();
+  const code = (await page.locator(".done-summary dd").first().textContent())?.trim();
+  await page.goto("/quote?service=correction");
+  await page.getByLabel("Vehicle").fill(`2019 Audi S5 ${testInfo.project.name}`);
+  await page.getByLabel("Full name").fill("Quote Person");
+  await page.getByLabel("Mobile number").fill("(210) 555-0177");
+  await page.getByLabel("Email").fill(`q-${email}`);
+  await page.getByRole("button", { name: "Request a quote" }).click();
+  await expect(page.getByRole("heading", { name: /reply within one business day/ })).toBeVisible();
+
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Dashboard sign-in" })).toBeVisible();
+  await page.getByLabel("Email").fill("cam@example.com");
+  await page.getByRole("button", { name: "Email me a code" }).click();
+  await expect(page.getByLabel("6-digit code")).toBeVisible();
+  const [codeEmail] = (await emailsTo(request, "cam@example.com", /dashboard code/)).slice(-1);
+  await page.getByLabel("6-digit code").fill(codeEmail.subject.slice(0, 6));
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+
+  const job = page.locator(".admin-job", { hasText: code });
+  await expect(job).toContainText("$50 deposit paid");
+  await expect(job.getByRole("link", { name: "Directions" })).toHaveAttribute("href", /google\.com\/maps/);
+  // Move it to the same day's evening window.
+  await job.getByRole("button", { name: "Move" }).click();
+  await job.locator(".admin-windows label", { hasText: "4–8 PM" }).click();
+  await job.getByRole("button", { name: "Move and email customer" }).click();
+  await expect(page.locator(".manage-message")).toContainText("Moved");
+  await expect(page.locator(".admin-job", { hasText: code })).toContainText("4–8 PM");
+  await expect(page.locator(".admin-job", { hasText: code }).locator(".badge")).toHaveText("Moved");
+  await emailsTo(request, email, /^Moved:/);
+
+  // Stays signed in after a reload.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+
+  // Block a whole day; the booking page shows it as full.
+  await page.getByRole("tab", { name: "Block time" }).click();
+  const blockDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date(Date.now() + (testInfo.project.name === "phone" ? 41 : 40) * 86400000));
+  await page.getByLabel("Date").fill(blockDay);
+  await page.getByRole("button", { name: "Block", exact: true }).click();
+  await expect(page.locator(".admin-blocks")).toContainText("Whole day");
+  const blocked = await (await request.get(`/api/availability?from=${blockDay}&days=1`)).json();
+  expect(blocked.days[0].slots.map(s => s.state)).toEqual(["taken", "taken", "taken"]);
+
+  // Quotes: mark the new request replied.
+  await page.getByRole("tab", { name: /Quotes/ }).click();
+  const quote = page.locator(".admin-job", { hasText: `2019 Audi S5 ${testInfo.project.name}` });
+  await expect(quote).toContainText("Paint correction");
+  await quote.getByRole("button", { name: "Mark replied" }).click();
+  await expect(page.locator(".admin-job", { hasText: `2019 Audi S5 ${testInfo.project.name}` })).toHaveCount(0); // "Needs a reply" filter
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("heading", { name: "Dashboard sign-in" })).toBeVisible();
+});

@@ -11,7 +11,7 @@ import { googleCalendarApi, googleTokenUrl } from "./providers";
 
 type Slot = (typeof bookingTimes)[number];
 export type CalendarEvent = { code: string; date: string; time: Slot; title: string; location: string; description: string };
-export type CalendarJob = { kind: "calendar"; op: "create"; event: CalendarEvent } | { kind: "calendar"; op: "delete"; code: string };
+export type CalendarJob = { kind: "calendar"; op: "create" | "move"; event: CalendarEvent } | { kind: "calendar"; op: "delete"; code: string };
 
 export function googleCalendarReady() {
   return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_SERVICE_ACCOUNT_KEY && process.env.GOOGLE_CALENDAR_ID);
@@ -112,7 +112,18 @@ export async function slotBusyOnCalendar(date: string, time: Slot) {
 // a timeout never creates a duplicate event or fails on an already-removed one.
 export async function runCalendarJob(job: CalendarJob) {
   if (!googleCalendarReady()) return; // Sync turned off since the job was queued.
-  if (job.op === "create") {
+  if (job.op === "move") {
+    // Rescheduled: move the existing event; if it isn't there (sync was off when it
+    // was booked), fall through and create it.
+    const [start, end] = slotWindow(job.event.date, job.event.time);
+    const response = await google(`${calendarPath()}/events/${eventId(job.event.code)}?sendUpdates=none`, { method: "PATCH", body: JSON.stringify({
+      start: { dateTime: new Date(start).toISOString(), timeZone: "America/Chicago" },
+      end: { dateTime: new Date(end).toISOString(), timeZone: "America/Chicago" }, status: "confirmed",
+    }) });
+    if (response.ok) return;
+    if (response.status !== 404 && response.status !== 410) throw new Error("google_event_move_failed");
+  }
+  if (job.op === "create" || job.op === "move") {
     const { event } = job;
     const [start, end] = slotWindow(event.date, event.time);
     const response = await google(`${calendarPath()}/events`, { method: "POST", body: JSON.stringify({
@@ -124,6 +135,7 @@ export async function runCalendarJob(job: CalendarJob) {
     if (response.ok || response.status === 409) return; // 409: already created by an earlier attempt.
     throw new Error("google_event_create_failed");
   }
+  if (job.op !== "delete") return;
   const response = await google(`${calendarPath()}/events/${eventId(job.code)}?sendUpdates=none`, { method: "DELETE" });
   if (response.ok || response.status === 404 || response.status === 410) return;
   throw new Error("google_event_delete_failed");

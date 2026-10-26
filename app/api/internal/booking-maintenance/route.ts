@@ -58,6 +58,8 @@ async function maintain(request: Request) {
       db.prepare("DELETE FROM secure_bookings WHERE status = 'expired' AND created_at < ?").bind(now - 2 * 86400),
       db.prepare("DELETE FROM customer_codes WHERE expires < ?").bind(now),
       db.prepare("DELETE FROM customer_sessions WHERE expires < ?").bind(now),
+      db.prepare("DELETE FROM quote_requests WHERE delete_after < ?").bind(now),
+      db.prepare("DELETE FROM blocked_slots WHERE date < ?").bind(addDays(chicagoDay(), -1)),
       db.prepare("UPDATE booking_outbox SET status = 'failed', payload = '' WHERE status = 'pending' AND (deadline <= ? OR (attempts >= 5 AND lease_until < ?))").bind(now, now),
       db.prepare("DELETE FROM booking_outbox WHERE status IN ('sent', 'failed') AND deadline < ?").bind(now - 7 * 86400),
     ]);

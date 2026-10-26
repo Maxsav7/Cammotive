@@ -835,3 +835,73 @@ p { text-wrap: pretty; }
 .text-mode-note { margin: 22px 0 4px; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line-strong); background: color-mix(in srgb, #e8c872 8%, var(--surface)); font-size: 15px; line-height: 1.55; }
 .booking-footer .hero-actions { justify-content: flex-end; }
 @media (max-width: 540px) { .booking-footer .hero-actions { flex-direction: column-reverse; align-items: stretch; } }
+
+/* ---------- Cam's dashboard (/admin) ---------- */
+.admin { padding-top: 120px; padding-left: max(24px, calc((100% - 900px) / 2)); padding-right: max(24px, calc((100% - 900px) / 2)); }
+.admin h1 { font-size: clamp(32px, 4vw, 44px); }
+.admin-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.admin-head .eyebrow { margin-bottom: 6px; }
+.admin-note { margin-bottom: 18px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line-strong); background: color-mix(in srgb, #e8c872 8%, var(--surface)); font-size: 15px; }
+.admin-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 20px; border-radius: 16px; border: 1px solid var(--line); overflow: hidden; }
+.admin-stats > div { padding: 14px 18px; border-right: 1px solid var(--line); }
+.admin-stats > div:last-child { border-right: 0; }
+.admin-stats dt { font-size: 13px; color: var(--muted); }
+.admin-stats dd { margin: 2px 0 0; font-size: 26px; font-weight: 620; font-stretch: 110%; }
+.admin-tabs { display: flex; gap: 6px; padding: 4px; margin-bottom: 18px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
+.admin-tabs button { flex: 1; min-height: 44px; border: 0; border-radius: 999px; background: transparent; font-size: 15px; font-weight: 600; color: var(--muted); }
+.admin-tabs button.selected { background: var(--text); color: var(--bg); }
+.admin-panel { display: grid; gap: 14px; }
+.admin-day { display: grid; gap: 12px; }
+.admin-day h3, .admin-subhead { margin-top: 10px; font-size: 17px; font-stretch: 104%; }
+.admin-job { display: grid; gap: 10px; padding: 20px 22px; border-radius: 18px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--panel-edge); }
+.admin-job.cancelled { opacity: .75; }
+.admin-job-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.admin-job-head h4 { font-size: 22px; font-weight: 620; font-stretch: 110%; }
+.admin-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line-strong); font-size: 12px; font-weight: 600; }
+.badge-cancelled { border-color: color-mix(in srgb, #ff9b8f 50%, transparent); }
+.badge-new { border-color: color-mix(in srgb, #e8c872 60%, transparent); }
+.admin-job-service { font-weight: 600; }
+.admin-job-customer { color: var(--muted); font-size: 15px; }
+.admin-job-customer strong { color: var(--text); }
+.admin-contact { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line-strong); font-size: 14px; font-weight: 600; }
+.chip:hover { background: var(--soft); }
+.chip-static { min-height: 36px; padding: 0 6px 0 14px; }
+.chip-static button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--soft); font-size: 16px; line-height: 1; }
+.admin-job-facts { margin: 0; display: grid; gap: 6px; }
+.admin-job-facts > div { display: grid; grid-template-columns: 90px 1fr; gap: 12px; font-size: 14px; }
+.admin-job-facts dt { color: var(--muted); }
+.admin-job-facts dd { margin: 0; overflow-wrap: anywhere; }
+.admin-actions { margin-top: 4px; }
+.admin-move, .admin-block { display: grid; gap: 14px; padding: 16px; border-radius: 14px; border: 1px solid var(--line-strong); background: var(--surface); }
+.admin-block { padding: 22px; background: var(--panel); }
+.admin-block p { color: var(--muted); font-size: 15px; }
+.admin-move label, .admin-block > label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.admin input[type="date"] { min-height: 48px; max-width: 240px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text); font-size: 16px; color-scheme: dark; }
+.site-shell[data-theme="light"] .admin input[type="date"] { color-scheme: light; }
+.admin fieldset { margin: 0; padding: 0; border: 0; }
+.admin legend { margin-bottom: 8px; font-size: 14px; color: var(--muted); }
+.admin-windows { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.admin-windows label { position: relative; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); font-size: 15px; font-weight: 600; color: var(--text); cursor: pointer; }
+.admin-windows label.selected { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); background: var(--soft); }
+.admin-windows label small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.admin-windows input { position: absolute; opacity: 0; pointer-events: none; }
+.admin-windows label:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+.admin-windows label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.admin-blocks { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.admin-blocks li { display: grid; gap: 8px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); }
+.admin-blocks li > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-recent { margin-top: 10px; }
+.admin-recent summary { cursor: pointer; padding: 12px 0; font-weight: 600; color: var(--muted); }
+.admin-recent[open] { display: grid; gap: 12px; }
+.admin-filter { display: flex; gap: 8px; }
+.admin-filter button { min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-size: 14px; }
+.admin-filter button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+@media (max-width: 540px) {
+  .admin { padding-top: 96px; }
+  .admin-job { padding: 18px; }
+  .admin-job-facts > div { grid-template-columns: 1fr; gap: 0; }
+  .admin-stats dd { font-size: 22px; }
+  .admin-tabs button { font-size: 14px; }
+}

@@ -33,13 +33,16 @@ export async function GET(request: Request) {
     if (!parsed.success) throw new HttpError(400, "Choose a valid date range.");
     const { from, days } = parsed.data;
     const to = addDays(from, days - 1);
-    let taken = new Set<string>(), blocked = new Set<string>();
+    let taken = new Set<string>(), blocked = new Set<string>(), closed = new Set<string>();
     if (databaseReady()) {
       try {
         const [active, legacy] = await Promise.all([
           db.prepare(`SELECT b.date, b.time FROM secure_bookings b WHERE b.date BETWEEN ? AND ? AND ${ACTIVE}`).bind(from, to, ...activeParams()).all(),
           db.prepare("SELECT DISTINCT date FROM appointments WHERE date BETWEEN ? AND ?").bind(from, to).all(),
         ]);
+        // Time Cam blocked off. Older databases may not have this table yet.
+        const off = await db.prepare("SELECT date, time FROM blocked_slots WHERE date BETWEEN ? AND ?").bind(from, to).all().catch(() => ({ results: [] }));
+        closed = new Set((off.results ?? []).map(r => `${r.date} ${r.time}`));
         taken = new Set((active.results ?? []).map(r => `${r.date} ${r.time}`));
         blocked = new Set((legacy.results ?? []).map(r => String(r.date)));
       } catch (error) { if (live) throw error; }
@@ -48,7 +51,7 @@ export async function GET(request: Request) {
     const result = Array.from({ length: days }, (_, i) => {
       const date = addDays(from, i);
       const open = bookableDay(date) && !blocked.has(date);
-      return { date, slots: bookingTimes.map(time => ({ time, state: !open ? "unavailable" : taken.has(`${date} ${time}`) || overlaps(busy, slotWindow(date, time)) ? "taken" : "open" })) };
+      return { date, slots: bookingTimes.map(time => ({ time, state: !open ? "unavailable" : taken.has(`${date} ${time}`) || closed.has(`${date} ${time}`) || closed.has(`${date} all`) || overlaps(busy, slotWindow(date, time)) ? "taken" : "open" })) };
     });
     return json({ enabled: live, days: result });
   } catch (error) { return failure(error); }

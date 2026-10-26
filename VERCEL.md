@@ -27,10 +27,11 @@ production.
    npx wrangler login
    npx wrangler d1 execute <your-database-name> --remote --file=drizzle/0000_booking_schema.sql
    npx wrangler d1 execute <your-database-name> --remote --file=drizzle/0001_stripe_deposits.sql
+   npx wrangler d1 execute <your-database-name> --remote --file=drizzle/0002_admin_dashboard.sql
    ```
 
-   If the database already exists, only the second command is needed (it adds
-   the deposit and sign-in tables and is safe to re-run).
+   If the database already exists, run only the files it hasn't had yet (each is
+   safe to re-run).
 
    Create an API token with **D1 Edit** permission for that account only. Set
    `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_D1_API_TOKEN`.
@@ -121,6 +122,28 @@ production.
 - Booking details are kept (encrypted) for about a year after the appointment so
   customers can see their history; unpaid, abandoned bookings are deleted after
   two days.
+
+## Cam's dashboard (/admin)
+
+Cam opens `https://www.camotivedetailing.com/admin` (bookmark it on his phone),
+enters his email and types the 6-digit code it sends. Only `CAM_BOOKING_EMAIL`
+can sign in (add more owner addresses, comma-separated, in `ADMIN_EMAILS`). He
+stays signed in on that device for 7 days.
+
+- **Jobs:** upcoming bookings by day with the customer's name, phone, email,
+  vehicle and address; one-tap Call, Text, Directions and Email; the estimate,
+  deposit paid and balance to collect. **Move** a job to another open window
+  (the customer is emailed the new time with an updated calendar invite, the
+  reminder resets and the Google Calendar event moves). **Cancel & refund**
+  refunds the $50 deposit and emails the customer. The last 30 days, including
+  cancellations, are below.
+- **Block time:** block a whole day or single windows. Blocked windows show as
+  taken on the booking page. Existing bookings aren't touched (it says so).
+- **Quotes:** every quote request (kept encrypted for 180 days), with Call,
+  Text and Email buttons, and "Mark replied" to keep track.
+
+The dashboard works before Stripe is connected (it only needs the database,
+email, Turnstile and the secrets), so Cam can block off time now.
 
 ## How emails and calendar changes are delivered
 

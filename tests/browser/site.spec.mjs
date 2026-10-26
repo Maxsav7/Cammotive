@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const pages = ["/", "/mobile-detailing", "/ceramic-coating", "/paint-correction", "/locations", "/stone-oak",
-  "/alamo-heights", "/the-dominion", "/leon-springs", "/downtown", "/our-work", "/reviews", "/contact", "/about", "/book", "/appointment", "/quote", "/manage"];
+  "/alamo-heights", "/the-dominion", "/leon-springs", "/downtown", "/our-work", "/reviews", "/contact", "/about", "/book", "/appointment", "/quote", "/manage", "/admin"];
 
 // Collects browser errors and broken same-origin requests for the current page.
 function watch(page) {

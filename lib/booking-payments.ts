@@ -8,9 +8,9 @@
 // two minutes, before the Stripe session exists). Payment confirms it and only
 // then are the confirmation emails and calendar event queued.
 import { db } from "./booking-store";
-import { digest, unseal } from "./booking-security";
+import { digest, HttpError, seal, unseal } from "./booking-security";
 import { emailJobs, sendQueuedEmailsSoon, type OutboxJob } from "./booking-outbox";
-import { bookedEmail, camBookingEmail, camCancelledEmail, cancelledEmail, slotLostEmail, type BookingDetails } from "./booking-emails";
+import { bookedEmail, camBookingEmail, camCancelledEmail, cancelledEmail, rescheduledEmail, slotLostEmail, type BookingDetails } from "./booking-emails";
 import { googleCalendarReady } from "./google-calendar";
 import { refundDeposit, type CheckoutSession } from "./stripe";
 
@@ -128,4 +128,45 @@ export async function cancelBooking(code: string, by: "customer" | "camotive") {
   }
   sendQueuedEmailsSoon();
   return d;
+}
+
+// Time Cam blocked off in the dashboard (a window, or "all" for the whole day).
+export async function isBlocked(date: string, time: string) {
+  return Boolean(await db.prepare("SELECT 1 AS blocked FROM blocked_slots WHERE date = ? AND time IN (?, 'all')").bind(date, time).first());
+}
+
+// Cam moves a confirmed booking to another window. The active-slot index refuses
+// a window that's already booked. The customer is emailed an updated invite, the
+// reminder is re-armed and the Google Calendar event is moved. The deposit carries over.
+export async function rescheduleBooking(code: string, date: string, time: BookingDetails["time"]) {
+  const row = await db.prepare("SELECT status, date, time, details FROM secure_bookings WHERE code = ?").bind(code).first();
+  if (!row) throw new HttpError(404, "Booking not found.");
+  if (row.status !== "confirmed") throw new HttpError(409, `This booking is ${row.status}.`);
+  if (row.date === date && row.time === time) throw new HttpError(409, "It's already at that time.");
+  const from = { date: String(row.date), time: String(row.time) };
+  const before = await unseal(String(row.details)) as BookingDetails;
+  const moved: BookingDetails = { ...before, date, time, sequence: (before.sequence ?? 0) + 1 };
+  await releaseStaleHolds(date, time);
+  let updated;
+  try {
+    updated = await db.prepare(`UPDATE secure_bookings SET date = ?, time = ?, details = ?, reminder_sent = 0, delete_after = ?
+      WHERE code = ? AND status = 'confirmed' AND date = ? AND time = ? AND NOT EXISTS (SELECT 1 FROM appointments WHERE date = ?) RETURNING code`)
+      .bind(date, time, await seal(moved), Math.floor(Date.parse(date + "T23:59:59Z") / 1000) + 400 * 86400, code, from.date, from.time, date).first();
+  } catch { throw new HttpError(409, "That window is already booked. Pick another."); }
+  if (!updated) throw new HttpError(409, "That window isn't available, or the booking just changed. Refresh and try again.");
+  const jobs: [string, OutboxJob][] = [[`${code}-moved-${moved.sequence}`, rescheduledEmail(code, moved, from)]];
+  if (googleCalendarReady()) jobs.push([`${code}-calendar-move-${moved.sequence}`, { kind: "calendar", op: "move", event: {
+    code, date, time, title: `${moved.packageName}: ${moved.name}`, location: moved.address,
+    description: [`${moved.packageName}${moved.addOns ? ` + ${moved.addOns}` : ""}`, `Estimate $${moved.total}, $50 deposit paid`, "",
+      moved.name, moved.phone, moved.email, moved.vehicle, "", `Reference ${code}. Booked online at Camotive.`].join("\n"),
+  } }]);
+  try {
+    await (await emailJobs(code, jobs)).run();
+  } catch (error) {
+    // Put it back, so the customer is never moved without being told.
+    await db.prepare("UPDATE secure_bookings SET date = ?, time = ?, details = ? WHERE code = ?").bind(from.date, from.time, String(row.details), code).run().catch(() => {});
+    throw error;
+  }
+  sendQueuedEmailsSoon();
+  return moved;
 }

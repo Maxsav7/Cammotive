@@ -4,7 +4,7 @@ import { configuredOrigin, digest, failure, HttpError, json, readJson, seal, tok
 import { verifyBot } from "@/lib/booking-security";
 import type { BookingDetails } from "@/lib/booking-emails";
 import { slotBusyOnCalendar } from "@/lib/google-calendar";
-import { ACTIVE, activeParams, camToken, customerToken, releaseStaleHolds } from "@/lib/booking-payments";
+import { ACTIVE, activeParams, camToken, customerToken, isBlocked, releaseStaleHolds } from "@/lib/booking-payments";
 import { createDepositCheckout } from "@/lib/stripe";
 import { depositDollars, holdMinutes } from "@/lib/booking-catalog";
 import { longDate } from "@/lib/booking-emails";
@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       throw new HttpError(409, TAKEN);
     }
     if (await slotBusyOnCalendar(details.date, details.time)) throw new HttpError(409, TAKEN);
+    if (await isBlocked(details.date, details.time)) throw new HttpError(409, TAKEN);
     await verifyBot(turnstileToken, "booking");
     await limit("recipient-email", details.email, 4, 86400);
     await limit("recipient-phone", details.phone, 4, 86400);
