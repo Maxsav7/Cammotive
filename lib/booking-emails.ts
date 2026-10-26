@@ -4,7 +4,7 @@
 import type { Email } from "./booking-outbox";
 import { configuredOrigin } from "./booking-security";
 import { appointmentIcs, toBase64 } from "./calendar";
-import { depositPercent, type bookingTimes } from "./booking-catalog";
+import { depositDollars, slotLabel, type bookingTimes } from "./booking-catalog";
 
 type Slot = (typeof bookingTimes)[number];
 export type BookingDetails = {
@@ -21,17 +21,18 @@ export function longDate(date: string) {
 const prettyPhone = (phone: string) => phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
 const firstName = (name: string) => name.trim().split(/\s+/)[0];
 const service = (d: BookingDetails) => `${d.packageName}${d.addOns ? ` + ${d.addOns}` : ""}`;
+const balance = (d: BookingDetails) => `$${d.total} estimate. $${depositDollars} deposit paid, about $${Math.max(0, d.total - depositDollars)} due when the detail is done`;
 const summary = (d: BookingDetails) =>
-  `${service(d)}\n${longDate(d.date)} at ${d.time}\n${d.vehicle}\n${d.address}\nEstimate: $${d.total} (final price confirmed before work begins)`;
+  `${service(d)}\n${longDate(d.date)}, ${slotLabel[d.time] ?? d.time} (we arrive at ${d.time})\n${d.vehicle}\n${d.address}\n${balance(d)} (final price confirmed before work begins)`;
 const arrivalNotes = [
   "Please have an outdoor water connection and a power outlet within reach of the vehicle.",
   "Make sure we can reach the parking spot (gate codes, HOA or apartment permission).",
-  `A ${depositPercent}% deposit is collected on site before work begins.`,
+  `Your $${depositDollars} deposit is paid and goes toward your total. If you cancel, the deposit is non-refundable.`,
 ];
 const beforeWeArrive = `Before we arrive: ${arrivalNotes.join(" ")}`;
 const detailRows = (d: BookingDetails, code: string): Row[] => [
-  ["When", `${longDate(d.date)}\n${d.time}`], ["Service", service(d)], ["Vehicle", d.vehicle],
-  ["Address", d.address], ["Estimate", `$${d.total}, final price confirmed before we start`], ["Reference", code],
+  ["When", `${longDate(d.date)}\n${slotLabel[d.time] ?? d.time} (we arrive at ${d.time})`], ["Service", service(d)], ["Vehicle", d.vehicle],
+  ["Address", d.address], ["Price", `${balance(d)}. Final price confirmed before we start.`], ["Reference", code],
 ];
 const invite = (code: string, d: BookingDetails, cancelled = false) => ({
   filename: cancelled ? "camotive-cancelled.ics" : "camotive-appointment.ics", contentType: "text/calendar",
@@ -83,19 +84,19 @@ ${rows}${button}${(l.after ?? []).map(p).join("\n")}${notes}
 // ---------------------------------------------------------------------------
 // Customer emails
 // ---------------------------------------------------------------------------
-export function accessEmail(code: string, email: string, accessToken: string): Email {
-  // The token travels in the URL fragment, which is never sent to servers or logged.
-  const link = `${configuredOrigin()}/appointment#access=${accessToken}`;
-  const subject = "Your Camotive appointment link";
+const appointmentsLink = (accessToken?: string) => `${configuredOrigin()}/appointment${accessToken ? `#access=${accessToken}` : ""}`;
+
+export function loginCodeEmail(email: string, code: string): Email {
+  const subject = `${code} is your Camotive sign-in code`;
   return { to: email, subject, text:
-    `Your reference is ${code}. Open your private appointment link (expires in 24 hours):\n${link}\n\nDo not forward this link. If you did not request this, ignore it. Questions? ${PHONE}.`,
-  html: renderEmail({ subject, preheader: `Private link for ${code}`, heading: "Your appointment link",
-    paragraphs: [`Your reference is ${code}. This private link shows your appointment and expires in 24 hours.`],
-    button: { label: "View my appointment", href: link }, after: ["Please don't forward this email. If you didn't ask for it, you can ignore it."] }) };
+    `Your code to view your Camotive appointments is ${code}. It expires in 15 minutes.\n\nIf you didn't ask for it, you can ignore this email. Questions? ${PHONE}.`,
+  html: renderEmail({ subject, preheader: `Your code is ${code}. It expires in 15 minutes.`, heading: "Your sign-in code",
+    paragraphs: ["Enter this code on the My appointments page to see and manage your bookings. It expires in 15 minutes."],
+    rows: [["Code", code]], after: ["Didn't ask for it? You can ignore this email. Nobody can sign in without the code."] }) };
 }
 
 export function bookedEmail(code: string, d: BookingDetails, accessToken: string): Email {
-  const link = `${configuredOrigin()}/appointment#access=${accessToken}`;
+  const link = appointmentsLink(accessToken);
   const subject = `Booked: ${longDate(d.date)} at ${d.time}`;
   return { to: d.email, subject, text:
 `Hi ${firstName(d.name)},
@@ -105,8 +106,9 @@ You're booked. We'll arrive at ${d.time} on ${longDate(d.date)}.
 ${summary(d)}
 
 Reference: ${code}
-The attached invite adds the appointment to your calendar, and you'll get a reminder the day before.
-View your appointment (link expires in 24 hours): ${link}
+Your $${depositDollars} deposit is paid. The attached invite adds the appointment to your calendar, and you'll get a reminder the day before.
+View or cancel your appointments: ${link}
+(If you cancel, the deposit is non-refundable.)
 
 ${beforeWeArrive}
 
@@ -114,30 +116,48 @@ Need to change something? Call or text ${PHONE}.
 Camotive Detailing`,
     html: renderEmail({ subject, preheader: `We arrive ${d.time}, ${longDate(d.date)}. Reference ${code}.`,
       status: { label: "Confirmed", tone: "confirmed" }, heading: `You're booked, ${firstName(d.name)}.`,
-      paragraphs: [`We'll arrive at ${d.time} on ${longDate(d.date)}. The attached invite adds it to your calendar, and we'll send a reminder the day before.`],
-      rows: detailRows(d, code), button: { label: "View my appointment", href: link },
-      after: ["The appointment link works for 24 hours. Need to change something? Call or text us."],
+      paragraphs: [`Your $${depositDollars} deposit is paid, so your time is reserved. We'll arrive at ${d.time} on ${longDate(d.date)}. The attached invite adds it to your calendar, and we'll send a reminder the day before.`],
+      rows: detailRows(d, code), button: { label: "View my appointments", href: link },
+      after: [`You can see all your bookings, or cancel one, from My appointments. If you cancel, the $${depositDollars} deposit is non-refundable. Questions? Call or text us.`],
       notes: { title: "Before we arrive", items: arrivalNotes } }),
     attachments: [invite(code, d)] };
 }
 
-export function cancelledEmail(code: string, d: BookingDetails): Email {
+// Who cancelled decides what happens to the deposit: refunded if we cancel, kept
+// (as agreed at booking) if the customer does.
+export function cancelledEmail(code: string, d: BookingDetails, by: "customer" | "camotive"): Email {
   const subject = `Cancelled: ${longDate(d.date)} at ${d.time}`;
   const book = `${configuredOrigin()}/book`;
+  const message = by === "camotive"
+    ? `We're sorry, we've had to cancel your appointment on ${longDate(d.date)} at ${d.time} (${code}). Your $${depositDollars} deposit has been refunded to your card; it can take 5–10 business days to appear.`
+    : `Your appointment on ${longDate(d.date)} at ${d.time} (${code}) is cancelled, as you asked. As agreed when you booked, the $${depositDollars} deposit is non-refundable.`;
+  const next = by === "camotive" ? "Pick another time online, or call or text us and we'll find one with you." : "Whenever you're ready, you're welcome to book again.";
   return { to: d.email, subject, text:
 `Hi ${firstName(d.name)},
 
-We're sorry, we've had to cancel your appointment on ${longDate(d.date)} at ${d.time} (${code}). Nothing is owed.
+${message}
 
-Please choose another time at ${book}, or call or text ${PHONE} and we'll find one with you.
+${next} ${book}
+Questions? Call or text ${PHONE}.
 
 Camotive Detailing`,
     html: renderEmail({ subject, preheader: `Your ${longDate(d.date)} appointment is cancelled.`,
       status: { label: "Cancelled", tone: "cancelled" }, heading: "Your appointment is cancelled",
-      paragraphs: [`Hi ${firstName(d.name)}, we're sorry, we've had to cancel your appointment on ${longDate(d.date)} at ${d.time} (${code}). Nothing is owed.`,
-        "Pick another time online, or call or text us and we'll find one with you."],
-      button: { label: "Choose another time", href: book } }),
+      paragraphs: [`Hi ${firstName(d.name)}, ${message.charAt(0).toLowerCase()}${message.slice(1)}`, next],
+      button: { label: "Book another time", href: book } }),
     attachments: [invite(code, d, true)] };
+}
+
+// Rare: a payment completed after its hold had already been released and the slot
+// rebooked. The deposit is refunded automatically and the customer is told.
+export function slotLostEmail(code: string, d: BookingDetails): Email {
+  const subject = `We couldn't hold ${longDate(d.date)} at ${d.time}`;
+  const book = `${configuredOrigin()}/book`;
+  const message = `Your payment came through after the time we were holding for you had been released and booked by someone else, so this booking (${code}) isn't confirmed. Your $${depositDollars} deposit has been refunded in full.`;
+  return { to: d.email, subject, text: `Hi ${firstName(d.name)},\n\n${message}\n\nPlease choose another time: ${book}\nQuestions? Call or text ${PHONE}.\n\nCamotive Detailing`,
+    html: renderEmail({ subject, preheader: "Your deposit has been refunded.", status: { label: "Not booked", tone: "cancelled" },
+      heading: "We couldn't hold that time", paragraphs: [`Hi ${firstName(d.name)}. ${message}`, "We're sorry for the trouble. Please pick another time."],
+      button: { label: "Choose another time", href: book } }) };
 }
 
 export function reminderEmail(code: string, d: BookingDetails): Email {
@@ -168,7 +188,7 @@ export function camBookingEmail(code: string, d: BookingDetails, adminToken: str
   const link = `${configuredOrigin()}/manage#booking=${code}&token=${adminToken}`;
   const subject = `New booking: ${d.packageName}, ${longDate(d.date)} ${d.time}`;
   return { to: process.env.CAM_BOOKING_EMAIL!, subject, text:
-`New booking ${code}. It's confirmed and the customer has their confirmation.
+`New booking ${code}. The $${depositDollars} deposit is paid (Stripe), so it's confirmed and the customer has their confirmation.
 
 ${summary(d)}
 
@@ -181,11 +201,27 @@ View or cancel: ${link}
 (Keep this link private. It opens this booking only.)`,
     html: renderEmail({ subject, preheader: `${d.name}, ${d.vehicle}. ${longDate(d.date)} at ${d.time}.`,
       status: { label: "Confirmed", tone: "confirmed" }, heading: `New booking: ${d.packageName}`,
-      paragraphs: ["It's confirmed and the customer has their confirmation email."],
+      paragraphs: [`The $${depositDollars} deposit is paid through Stripe, so it's confirmed and the customer has their confirmation email. If you cancel it, the deposit is refunded automatically.`],
       rows: [...detailRows(d, code).slice(0, 5), ["Customer", `${d.name}\n${prettyPhone(d.phone)}\n${d.email}`], ["Reference", code]],
       button: { label: "View or cancel", href: link },
       after: ["Keep this link private. It opens this booking only. The attached invite adds it to your calendar if Google Calendar sync isn't set up."] }),
     attachments: [invite(code, d)] };
+}
+
+export function camCancelledEmail(code: string, d: BookingDetails): Email {
+  const subject = `Customer cancelled: ${longDate(d.date)} ${d.time}`;
+  return { to: process.env.CAM_BOOKING_EMAIL!, subject, text:
+`${d.name} cancelled booking ${code}. The time is open again. The $${depositDollars} deposit is kept (non-refundable).
+
+${summary(d)}
+
+${d.name}
+${d.phone}
+${d.email}`,
+    html: renderEmail({ subject, preheader: `${d.name} cancelled. The slot is open again.`, status: { label: "Cancelled by customer", tone: "cancelled" },
+      heading: `${firstName(d.name)} cancelled`, paragraphs: [`The time is open again. The $${depositDollars} deposit is kept, as the customer agreed when booking.`],
+      rows: [...detailRows(d, code).slice(0, 4), ["Customer", `${d.name}\n${prettyPhone(d.phone)}\n${d.email}`], ["Reference", code]] }),
+    attachments: [invite(code, d, true)] };
 }
 
 export type QuoteDetails = { service: string; vehicle: string; name: string; email: string; phone: string; timing: string; notes: string };

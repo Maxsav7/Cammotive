@@ -1,9 +1,8 @@
 import { decisionSchema } from "@/lib/booking-validation";
 import { db, limitRequest, requireBooking } from "@/lib/booking-store";
 import { digest, failure, HttpError, json, readJson, unseal } from "@/lib/booking-security";
-import { emailJobs, sendQueuedEmailsSoon, type OutboxJob } from "@/lib/booking-outbox";
-import { cancelledEmail, type BookingDetails } from "@/lib/booking-emails";
-import { googleCalendarReady } from "@/lib/google-calendar";
+import type { BookingDetails } from "@/lib/booking-emails";
+import { cancelBooking } from "@/lib/booking-payments";
 
 // Cam's private link (from the new-booking email) opens one booking, where he can
 // cancel it. The admin token is a 256-bit secret sent only to Cam, stored here
@@ -24,23 +23,11 @@ export async function POST(request: Request) {
     const details = await unseal(String(row.details)) as BookingDetails;
     const view = () => ({ booking: { ...details, code: row.code, date: row.date, time: row.time, status: row.status } });
     if (action === "view") return json(view());
-    if (row.status !== "confirmed" && row.status !== "pending") throw new HttpError(409, `This booking was already ${row.status}.`);
-    // Cancelling releases the slot (the active-slot index only covers pending/confirmed),
-    // emails the customer and removes the event from Cam's calendar.
-    const updated = await db.prepare("UPDATE secure_bookings SET status = 'cancelled', decided_at = ? WHERE code = ? AND status IN ('pending', 'confirmed') RETURNING code")
-      .bind(Math.floor(Date.now() / 1000), code).first();
-    if (!updated) throw new HttpError(409, "This booking was already changed.");
-    const jobs: [string, OutboxJob][] = [[`${code}-cancelled`, cancelledEmail(code, details)]];
-    if (googleCalendarReady()) jobs.push([`${code}-calendar-delete`, { kind: "calendar", op: "delete", code }]);
-    try {
-      await (await emailJobs(code, jobs)).run();
-    } catch (error) {
-      // Undo, so Cam can retry rather than leave the customer unaware.
-      await db.prepare("UPDATE secure_bookings SET status = ? WHERE code = ? AND status = 'cancelled'").bind(row.status, code).run().catch(() => {});
-      throw error;
-    }
+    if (row.status !== "confirmed") throw new HttpError(409, `This booking is ${row.status}.`);
+    // Cancelling refunds the deposit, releases the slot, emails the customer and
+    // removes the event from Cam's calendar.
+    if (!await cancelBooking(code, "camotive")) throw new HttpError(409, "This booking was already changed.");
     row.status = "cancelled";
-    sendQueuedEmailsSoon();
     return json(view());
   } catch (error) { return failure(error); }
 }

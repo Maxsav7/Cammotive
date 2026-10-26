@@ -3,6 +3,7 @@ import { digest, failure, HttpError, json, unseal } from "@/lib/booking-security
 import { dispatchEmails, emailJob } from "@/lib/booking-outbox";
 import { reminderEmail, type BookingDetails } from "@/lib/booking-emails";
 import { addDays, chicagoDay } from "@/lib/booking-validation";
+import { ensureNotified } from "@/lib/booking-payments";
 
 // Queues a reminder for each confirmed appointment tomorrow (Chicago time). The
 // flag is claimed first so an overlapping run can't send a second reminder.
@@ -50,14 +51,20 @@ async function maintain(request: Request) {
     await db.batch([
       db.prepare("DELETE FROM booking_limits WHERE expires < ?").bind(now),
       db.prepare("DELETE FROM secure_bookings WHERE delete_after < ?").bind(now),
-      // A booking with no queued emails means the save was interrupted halfway;
-      // nobody was notified, so release the slot. Outbox rows live at least 8 days,
-      // so only look at bookings younger than that.
-      db.prepare(`DELETE FROM secure_bookings WHERE created_at < ? AND created_at > ?
-        AND NOT EXISTS (SELECT 1 FROM booking_outbox WHERE booking_outbox.booking_code = secure_bookings.code)`).bind(now - 600, now - 6 * 86400),
+      // Holds whose payment window has passed (normally Stripe's "expired" webhook does this).
+      db.prepare(`UPDATE secure_bookings SET status = 'expired' WHERE status = 'pending' AND created_at < ?
+        AND NOT EXISTS (SELECT 1 FROM booking_payments p WHERE p.code = secure_bookings.code AND p.hold_expires > ?)`).bind(now - 120, now),
+      // Unpaid, abandoned bookings never became appointments: keep their details only briefly.
+      db.prepare("DELETE FROM secure_bookings WHERE status = 'expired' AND created_at < ?").bind(now - 2 * 86400),
+      db.prepare("DELETE FROM customer_codes WHERE expires < ?").bind(now),
+      db.prepare("DELETE FROM customer_sessions WHERE expires < ?").bind(now),
       db.prepare("UPDATE booking_outbox SET status = 'failed', payload = '' WHERE status = 'pending' AND (deadline <= ? OR (attempts >= 5 AND lease_until < ?))").bind(now, now),
       db.prepare("DELETE FROM booking_outbox WHERE status IN ('sent', 'failed') AND deadline < ?").bind(now - 7 * 86400),
     ]);
+    // A paid booking whose confirmation wasn't queued (interrupted mid-way): queue it now.
+    const unnotified = await db.prepare(`SELECT code FROM secure_bookings b WHERE status = 'confirmed' AND created_at > ?
+      AND NOT EXISTS (SELECT 1 FROM booking_outbox o WHERE o.id = b.code || '-booked') LIMIT 10`).bind(now - 6 * 86400).all();
+    for (const { code } of unnotified.results ?? []) await ensureNotified(String(code)).catch(() => console.error("booking_notify_retry_failed"));
     const reminders = await queueReminders();
     const sent = await dispatchEmails(10);
     const failed = await db.prepare("SELECT count(*) AS count FROM booking_outbox WHERE status = 'failed'").first();

@@ -5,8 +5,8 @@
 // Everything here is off unless all three GOOGLE_* variables are set. When Google
 // is slow or down, booking keeps working: availability falls back to the database
 // alone, and calendar writes are retried from the outbox.
-import { slotHours, type bookingTimes } from "./booking-catalog";
-import { slotToUtc } from "./calendar";
+import { type bookingTimes } from "./booking-catalog";
+import { slotEndUtc, slotToUtc } from "./calendar";
 import { googleCalendarApi, googleTokenUrl } from "./providers";
 
 type Slot = (typeof bookingTimes)[number];
@@ -92,8 +92,7 @@ async function freeBusy(from: Date, to: Date) {
   return (calendar.busy ?? []).map(b => [Date.parse(b.start), Date.parse(b.end)] as [number, number]).filter(([s, e]) => s < e);
 }
 export const slotWindow = (date: string, time: Slot) => {
-  const start = slotToUtc(date, time).getTime();
-  return [start, start + slotHours * 3600000] as const;
+  return [slotToUtc(date, time).getTime(), slotEndUtc(date, time).getTime()] as const;
 };
 export const overlaps = (busy: [number, number][], [start, end]: readonly [number, number]) => busy.some(([s, e]) => s < end && e > start);
 

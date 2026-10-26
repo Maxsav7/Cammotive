@@ -27,17 +27,22 @@ export const bookingSchema = z.object({
   phone: z.string().max(30).transform(v => v.replace(/[ ()+.-]/g, "")).refine(v => /^(1)?[2-9]\d{9}$/.test(v)).transform(v => `+${v.length === 10 ? "1" : ""}${v}`),
   vehicle: text(3, 120), address: text(8, 250), turnstileToken: z.string().min(1).max(2048),
 }).strict();
-export const recoverySchema = z.object({
-  code: z.string().trim().toUpperCase().regex(/^CAM-[A-F0-9]{12}$/),
-  email: z.string().trim().email().max(254).transform(v => v.toLowerCase()),
-  turnstileToken: z.string().min(1).max(2048),
-}).strict();
+const email = z.string().trim().email().max(254).transform(v => v.toLowerCase());
+const bookingCode = z.string().trim().toUpperCase().regex(/^CAM-[A-F0-9]{12}$/);
+// My appointments: ask for a sign-in code, then exchange it (or the link from the
+// confirmation email) for a short session.
+export const codeRequestSchema = z.object({ email, turnstileToken: z.string().min(1).max(2048) }).strict();
+export const signInSchema = z.union([
+  z.object({ email, code: z.string().trim().regex(/^\d{6}$/) }).strict(),
+  z.object({ access: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+]);
+export const customerCancelSchema = z.object({ code: bookingCode }).strict();
 export const availabilitySchema = z.object({
   from: isoDay,
   days: z.coerce.number().int().min(1).max(62),
 });
 export const decisionSchema = z.object({
-  code: z.string().trim().toUpperCase().regex(/^CAM-[A-F0-9]{12}$/),
+  code: bookingCode,
   action: z.enum(["view", "cancel"]),
 }).strict();
 export const quoteSchema = z.object({

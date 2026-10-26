@@ -61,6 +61,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       BOOKING_ENCRYPTION_KEY: "ab".repeat(32), BOOKING_HASH_SECRET: "synthetic-hash-secret-".repeat(3),
       BOOKING_CRON_SECRET: "synthetic-cron-secret-".repeat(3), VERCEL: "1",
       CLOUDFLARE_ACCOUNT_ID: "test", CLOUDFLARE_D1_DATABASE_ID: "test", CLOUDFLARE_D1_API_TOKEN: "synthetic",
+      STRIPE_SECRET_KEY: "sk_test_synthetic0000", STRIPE_WEBHOOK_SECRET: "whsec_synthetic00000",
     });
     const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('test') } }", compatibilityDate: "2026-05-15", d1Databases: ["DB"] }));
     t.after(() => mf.dispose());
@@ -69,6 +70,8 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     // are safe on a database that already has the legacy/hand-written schema.
     for (let pass = 0; pass < 2; pass++) for (const sql of migrationStatements()) await database.prepare(sql).run();
     let emails = [], failEmail = false, wrongHost = false, dbFailure = false, failOutboxInsert = false;
+    // Stripe stand-in: Checkout Sessions by id, refunds, and an outage switch.
+    const stripeSessions = new Map(); let refunds = [], stripeDown = false;
     // Google Calendar stand-in: events by id, Cam's existing busy blocks, and an outage switch.
     const googleEvents = new Map(); let googleBusy = [], googleDown = false, googleTokens = 0;
     const googleKeys = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"]);
@@ -103,6 +106,30 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         googleTokens++;
         return Response.json({ access_token: "google-token", expires_in: 3600 });
       }
+      if (String(url).startsWith("https://api.stripe.com/v1/")) {
+        assert.equal(options.headers.Authorization, "Bearer sk_test_synthetic0000");
+        if (stripeDown) return Response.json({ error: { message: "down" } }, { status: 503 });
+        const path = new URL(url).pathname;
+        const form = Object.fromEntries(new URLSearchParams(options.body ?? ""));
+        if (path === "/v1/checkout/sessions") {
+          const existing = [...stripeSessions.values()].find(x => x.idempotencyKey === options.headers["Idempotency-Key"]);
+          if (existing) return Response.json(existing);
+          const id = `cs_test_${crypto.randomUUID().replace(/-/g, "")}`;
+          const session = { id, url: `https://checkout.stripe.com/c/pay/${id}`, status: "open", payment_status: "unpaid", payment_intent: null,
+            amount_total: Number(form["line_items[0][price_data][unit_amount]"]), client_reference_id: form.client_reference_id,
+            metadata: { booking_code: form["metadata[booking_code]"] }, form, idempotencyKey: options.headers["Idempotency-Key"] };
+          stripeSessions.set(id, session); return Response.json(session);
+        }
+        const match = /^\/v1\/checkout\/sessions\/([^/]+)(\/expire)?$/.exec(path);
+        if (match) {
+          const session = stripeSessions.get(match[1]);
+          if (!session) return Response.json({}, { status: 404 });
+          if (!match[2]) return Response.json(session);
+          if (session.status !== "open") return Response.json({}, { status: 400 });
+          session.status = "expired"; return Response.json(session);
+        }
+        if (path === "/v1/refunds") { refunds.push({ ...form, key: options.headers["Idempotency-Key"] }); return Response.json({ id: "re_1" }); }
+      }
       if (String(url).startsWith("https://www.googleapis.com/calendar/v3/")) {
         if (googleDown) return Response.json({}, { status: 503 });
         assert.equal(options.headers.Authorization, "Bearer google-token");
@@ -127,7 +154,11 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const adapter = load(resolve(root, runtime === "cloudflare-binding" ? "lib/booking-db.cloudflare.ts" : "lib/booking-db.ts"));
     load = loader({ "@/lib/booking-db": adapter });
     const route = load(resolve(root, "app/api/appointments/route.ts"));
-    const access = load(resolve(root, "app/api/appointments/access/route.ts"));
+    const webhook = load(resolve(root, "app/api/stripe/webhook/route.ts"));
+    const checkout = load(resolve(root, "app/api/checkout/route.ts"));
+    const signinCode = load(resolve(root, "app/api/account/code/route.ts"));
+    const signin = load(resolve(root, "app/api/account/session/route.ts"));
+    const account = load(resolve(root, "app/api/account/appointments/route.ts"));
     const maintenance = load(resolve(root, "app/api/internal/booking-maintenance/route.ts"));
     const outbox = load(resolve(root, "lib/booking-outbox.ts"));
     const security = load(resolve(root, "lib/booking-security.ts"));
@@ -147,26 +178,54 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const request = (data, key = crypto.randomUUID(), headers = {}) => new Request("https://booking.example.com/api/appointments", {
       method: "POST", headers: { origin: "https://booking.example.com", "content-type": "application/json", "idempotency-key": key, ...headers }, body: JSON.stringify(data),
     });
-    const lookup = value => new Request("https://booking.example.com/api/appointments", { headers: value ? { authorization: `Bearer ${value}` } : {} });
     const count = async table => Number((await database.prepare(`SELECT count(*) AS n FROM ${table}`).first()).n);
     const reset = async () => {
-      await database.batch(["booking_outbox", "secure_bookings", "booking_limits", "appointments"].map(table => database.prepare(`DELETE FROM ${table}`)));
+      await database.batch(["booking_outbox", "booking_payments", "secure_bookings", "booking_limits", "appointments", "customer_codes", "customer_sessions"].map(table => database.prepare(`DELETE FROM ${table}`)));
       emails = []; failEmail = false; wrongHost = false; dbFailure = false; failOutboxInsert = false;
       googleEvents.clear(); googleBusy = []; googleDown = false;
+      stripeSessions.clear(); refunds = []; stripeDown = false;
     };
+    // Stripe webhooks, signed the way Stripe signs them.
+    const signed = async (event, { secret = process.env.STRIPE_WEBHOOK_SECRET, t = Math.floor(Date.now() / 1000) } = {}) => {
+      const body = JSON.stringify(event);
+      const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      const signature = Buffer.from(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${body}`))).toString("hex");
+      return new Request("https://booking.example.com/api/stripe/webhook", { method: "POST", headers: { "content-type": "application/json", "stripe-signature": `t=${t},v1=${signature}` }, body });
+    };
+    const sessionFor = code => [...stripeSessions.values()].find(x => x.metadata.booking_code === code);
+    const pay = async code => {
+      const session = sessionFor(code);
+      Object.assign(session, { status: "complete", payment_status: "paid", payment_intent: `pi_test_${code.slice(4)}` });
+      const response = await webhook.POST(await signed({ type: "checkout.session.completed", data: { object: session } }));
+      assert.equal(response.status, 200);
+      return session;
+    };
+    // Books and pays the deposit; returns the booking API's response body.
+    const book = async (data = valid(), key) => {
+      const response = await route.POST(request(data, key));
+      assert.equal(response.status, 201, `booking failed: ${(await response.clone().json()).error}`);
+      const result = await response.json();
+      await pay(result.confirmationCode);
+      return result;
+    };
+    const run = async () => (await (await maintenance.POST(new Request("https://booking.example.com/api/internal/booking-maintenance", { method: "POST", headers: { authorization: `Bearer ${process.env.BOOKING_CRON_SECRET}` } }))).json());
+    const post = (handler, url, body, headers = {}) => handler(new Request(`https://booking.example.com${url}`, { method: "POST", headers: { origin: "https://booking.example.com", "content-type": "application/json", ...headers }, body: JSON.stringify(body) }));
     const withGoogle = async run => {
       Object.assign(process.env, { GOOGLE_SERVICE_ACCOUNT_EMAIL: "camotive@test.iam.gserviceaccount.com", GOOGLE_SERVICE_ACCOUNT_KEY: googlePem, GOOGLE_CALENDAR_ID: "cam@example.com" });
       try { await run(); } finally { for (const key of ["GOOGLE_SERVICE_ACCOUNT_EMAIL", "GOOGLE_SERVICE_ACCOUNT_KEY", "GOOGLE_CALENDAR_ID"]) delete process.env[key]; }
     };
     try {
-      await t.test("fails closed while disabled, regardless of submitted data", async () => {
+      await t.test("fails closed while disabled, or without Stripe keys, regardless of submitted data", async () => {
         process.env.BOOKING_ENABLED = "false";
         assert.equal((await route.POST(request(valid()))).status, 503);
         process.env.BOOKING_ENABLED = "true";
+        const stripeKey = process.env.STRIPE_SECRET_KEY; process.env.STRIPE_SECRET_KEY = "";
+        assert.equal((await route.POST(request(valid()))).status, 503);
+        process.env.STRIPE_SECRET_KEY = stripeKey;
         assert.equal(await count("secure_bookings"), 0);
       });
       await t.test("rejects forged prices, unknown fields, invalid dates, types and duplicate addons before writes", async () => {
-        for (const changes of [{ total: -999 }, { packageName: "forged" }, { date: "2026-02-30" }, { date: future(-1) }, { date: future(182) }, { name: {} }, { email: "bad" }, { phone: "911" }, { addOnIds: ["engine", "engine"] }, { time: "3:00 AM" }, { time: "4:00 PM" }, { packageId: "ceramic3" }, { date: chicagoDay(0) }, { name: "x".repeat(101) }]) {
+        for (const changes of [{ total: -999 }, { deposit: 1 }, { packageName: "forged" }, { date: "2026-02-30" }, { date: future(-1) }, { date: future(182) }, { name: {} }, { email: "bad" }, { phone: "911" }, { addOnIds: ["engine", "engine"] }, { time: "3:00 AM" }, { time: "1:00 PM" }, { time: "8:00 PM" }, { packageId: "ceramic3" }, { date: chicagoDay(0) }, { name: "x".repeat(101) }]) {
           await reset(); assert.equal((await route.POST(request({ ...valid(), ...changes }))).status, 400);
           assert.equal(await count("secure_bookings"), 0); assert.equal(await count("booking_outbox"), 0);
         }
@@ -187,67 +246,155 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         wrongHost = true; assert.equal((await route.POST(request(valid()))).status, 400);
         assert.equal(await count("secure_bookings"), 0);
       });
-      await t.test("server estimate, encrypted PII, opaque token lookup and expiry", async () => {
+      await t.test("booking holds the slot and creates a $50 Stripe Checkout; nothing is sent until it's paid", async () => {
         await reset(); const response = await route.POST(request(valid())); assert.equal(response.status, 201);
-        const result = await response.json(); assert.equal(result.total, 325); assert.match(result.confirmationCode, /^CAM-[A-F0-9]{12}$/);
+        const result = await response.json();
+        assert.equal(result.total, 325); assert.equal(result.deposit, 50); assert.equal(result.status, "pending");
+        assert.match(result.confirmationCode, /^CAM-[A-F0-9]{12}$/); assert.match(result.checkoutUrl, /^https:\/\/checkout\.stripe\.com\//);
+        const session = sessionFor(result.confirmationCode);
+        assert.equal(session.amount_total, 5000, "deposit is fixed server-side");
+        assert.equal(session.form.mode, "payment"); assert.equal(session.form.customer_email, "audit@example.com");
+        assert.ok(Number(session.form.expires_at) - Date.now() / 1000 >= 1800, "Stripe requires at least 30 minutes");
+        assert.equal(session.form.success_url, "https://booking.example.com/book?paid={CHECKOUT_SESSION_ID}");
+        assert.match(session.form.cancel_url, /\/book\?unpaid=CAM-[A-F0-9]{12}&release=[a-f0-9]{32}$/);
+        assert.match(session.form["custom_text[submit][message]"], /non-refundable if you cancel/);
         const row = await database.prepare("SELECT * FROM secure_bookings").first();
-        assert.ok(!JSON.stringify(row).includes("Synthetic Street"));
-        const job = await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE '%-booked'").first();
-        const email = await security.unseal(job.payload); const raw = email.text.match(/#access=([a-f0-9]{64})/)[1];
-        assert.ok(!JSON.stringify(row).includes(raw));
-        assert.equal((await route.GET(lookup())).status, 401);
-        assert.equal((await route.GET(new Request(`https://booking.example.com/api/appointments?code=${result.confirmationCode}`))).status, 401);
-        const authorized = await route.GET(lookup(raw)); assert.equal(authorized.status, 200);
-        assert.match(authorized.headers.get("cache-control"), /no-store/);
-        const view = await authorized.json(); assert.equal(view.appointment.total, 325); assert.equal(view.appointment.status, "confirmed");
-        assert.match(email.subject, /^Booked/); assert.match(email.text, /You're booked/);
+        assert.equal(row.status, "pending"); assert.ok(!JSON.stringify(row).includes("Synthetic Street"));
+        assert.equal(await count("booking_outbox"), 0, "no confirmation before payment");
+        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["taken", "open", "open"], "the hold blocks the slot");
+        await pay(result.confirmationCode);
+        assert.equal((await database.prepare("SELECT status FROM secure_bookings").first()).status, "confirmed");
+        const payment = await database.prepare("SELECT * FROM booking_payments").first();
+        assert.equal(payment.payment_intent, `pi_test_${result.confirmationCode.slice(4)}`); assert.ok(payment.paid_at);
+        const email = await sealed("%-booked");
+        assert.match(email.subject, /^Booked/); assert.match(email.text, /\$50 deposit is paid/); assert.match(email.text, /non-refundable/);
         assert.match(email.html, /You&#39;re booked, Audit\./); assert.match(email.html, /\/brand\/camotive-email-logo\.png/);
         assert.match(Buffer.from(email.attachments[0].content, "base64").toString(), /STATUS:CONFIRMED/);
-        assert.equal(view.appointment.address, undefined); assert.equal(view.appointment.email, undefined);
-        await database.prepare("UPDATE secure_bookings SET token_expires = 0").run();
-        assert.equal((await route.GET(lookup(raw))).status, 401);
+        const raw = email.text.match(/#access=([a-f0-9]{64})/)[1];
+        assert.ok(!JSON.stringify(await database.prepare("SELECT * FROM secure_bookings").first()).includes(raw), "link token stored only as a hash");
+      });
+      await t.test("webhooks need a valid, recent Stripe signature, and duplicates are harmless", async () => {
+        await reset(); const { confirmationCode: code } = await (await route.POST(request(valid()))).json();
+        const session = { ...sessionFor(code), status: "complete", payment_status: "paid", payment_intent: "pi_test_forged" };
+        const event = { type: "checkout.session.completed", data: { object: session } };
+        assert.equal((await webhook.POST(await signed(event, { secret: "whsec_wrongsecret0000" }))).status, 400);
+        assert.equal((await webhook.POST(await signed(event, { t: Math.floor(Date.now() / 1000) - 600 }))).status, 400, "replayed old event");
+        const unsigned = new Request("https://booking.example.com/api/stripe/webhook", { method: "POST", body: JSON.stringify(event) });
+        assert.equal((await webhook.POST(unsigned)).status, 400);
+        assert.equal((await database.prepare("SELECT status FROM secure_bookings").first()).status, "pending");
+        const unpaid = { type: "checkout.session.completed", data: { object: { ...session, payment_status: "unpaid" } } };
+        assert.equal((await webhook.POST(await signed(unpaid))).status, 200);
+        assert.equal((await database.prepare("SELECT status FROM secure_bookings").first()).status, "pending", "unpaid completion doesn't confirm");
+        for (let i = 0; i < 3; i++) assert.equal((await webhook.POST(await signed(event))).status, 200);
+        assert.equal((await database.prepare("SELECT status FROM secure_bookings").first()).status, "confirmed");
+        assert.equal(await count("booking_outbox"), 2, "one confirmation and one notification, however many deliveries");
+        assert.equal((await webhook.POST(await signed({ type: "customer.created", data: { object: {} } }))).status, 200, "other events are ignored");
+      });
+      await t.test("an expired or abandoned checkout releases the slot", async () => {
+        await reset();
+        const first = await (await route.POST(request(valid()))).json();
+        assert.equal((await route.POST(request({ ...valid(), email: "other@example.com", phone: "2105550129" }))).status, 409, "held");
+        const expired = { ...sessionFor(first.confirmationCode), status: "expired" };
+        assert.equal((await webhook.POST(await signed({ type: "checkout.session.expired", data: { object: expired } }))).status, 200);
+        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"]);
+        const second = await (await route.POST(request({ ...valid(), email: "other@example.com", phone: "2105550129" }))).json();
+        assert.equal(second.status, "pending");
+        // "Back" from Stripe: only with the release token from the cancel URL.
+        const release = new URL(sessionFor(second.confirmationCode).form.cancel_url).searchParams.get("release");
+        assert.equal((await post(checkout.POST, "/api/checkout", { code: second.confirmationCode, release: "0".repeat(32) })).status, 403);
+        assert.equal((await post(checkout.POST, "/api/checkout", { code: second.confirmationCode, release })).status, 200);
+        assert.equal(sessionFor(second.confirmationCode).status, "expired", "the checkout can't be paid afterwards");
+        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"]);
+        // A hold that simply runs out frees the slot too, and maintenance tidies it up.
+        const third = await (await route.POST(request({ ...valid(), email: "third@example.com", phone: "2105550130" }))).json();
+        await database.prepare("UPDATE booking_payments SET hold_expires = 0 WHERE code = ?").bind(third.confirmationCode).run();
+        await database.prepare("UPDATE secure_bookings SET created_at = created_at - 600 WHERE code = ?").bind(third.confirmationCode).run();
+        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"]);
+        await run();
+        assert.equal((await database.prepare("SELECT status FROM secure_bookings WHERE code = ?").bind(third.confirmationCode).first()).status, "expired");
+      });
+      await t.test("payment after the slot was rebooked is refunded automatically", async () => {
+        await reset();
+        const late = await (await route.POST(request(valid()))).json();
+        await database.prepare("UPDATE booking_payments SET hold_expires = 0").run();
+        await database.prepare("UPDATE secure_bookings SET created_at = created_at - 600").run();
+        await book({ ...valid(), email: "quick@example.com", phone: "2105550131" });
+        await pay(late.confirmationCode);
+        assert.equal((await database.prepare("SELECT status FROM secure_bookings WHERE code = ?").bind(late.confirmationCode).first()).status, "refunded");
+        assert.equal(refunds.length, 1); assert.equal(refunds[0].payment_intent, `pi_test_${late.confirmationCode.slice(4)}`);
+        assert.match((await sealed("%-slot-lost")).text, /refunded in full/);
+      });
+      await t.test("the return page confirms with Stripe directly if the webhook is late", async () => {
+        await reset(); const { confirmationCode: code } = await (await route.POST(request(valid()))).json();
+        const session = sessionFor(code);
+        const status = async () => (await checkout.GET(new Request(`https://booking.example.com/api/checkout?session_id=${session.id}`))).json();
+        assert.equal((await status()).status, "pending");
+        Object.assign(session, { status: "complete", payment_status: "paid", payment_intent: "pi_test_late" }); // paid, no webhook yet
+        const result = await status();
+        assert.equal(result.status, "confirmed"); assert.equal(result.deposit, 50); assert.equal(result.email, undefined); assert.equal(result.phone, undefined);
+        assert.equal(await count("booking_outbox"), 2);
+        assert.equal((await checkout.GET(new Request("https://booking.example.com/api/checkout?session_id=nope"))).status, 400);
       });
       await t.test("atomic slot capacity and idempotency under concurrent requests", async () => {
         await reset(); const data = valid(), key = crypto.randomUUID();
         const responses = await Promise.all([route.POST(request(data, key)), route.POST(request(data, key))]);
         assert.deepEqual(responses.map(r => r.status).sort(), [200, 201]);
-        const codes = await Promise.all(responses.map(r => r.json())); assert.equal(codes[0].confirmationCode, codes[1].confirmationCode);
-        assert.equal(await count("secure_bookings"), 1); assert.equal(await count("booking_outbox"), 2);
+        const results = await Promise.all(responses.map(r => r.json()));
+        assert.equal(results[0].confirmationCode, results[1].confirmationCode); assert.equal(results[0].checkoutUrl, results[1].checkoutUrl, "a retry gets the same payment page");
+        assert.equal(await count("secure_bookings"), 1); assert.equal(stripeSessions.size, 1);
         assert.equal((await route.POST(request({ ...data, vehicle: "Different car" }, key))).status, 409);
-        assert.equal((await route.POST(request({ ...data, email: "second@example.com", phone: "2105550124" }))).status, 409, "same slot is taken");
-        assert.equal(await count("booking_outbox"), 2);
-        assert.equal((await route.POST(request({ ...data, time: "1:00 PM", email: "second@example.com", phone: "2105550124" }))).status, 201, "second slot that day is open");
+        assert.equal((await route.POST(request({ ...data, email: "second@example.com", phone: "2105550124" }))).status, 409, "same slot is held");
+        assert.equal((await route.POST(request({ ...data, time: "12:00 PM", email: "second@example.com", phone: "2105550124" }))).status, 201, "second slot that day is open");
+        await pay(results[0].confirmationCode);
+        assert.equal((await (await route.POST(request(data, key))).json()).status, "confirmed", "a retry after paying reports the booking");
         await database.prepare("DELETE FROM booking_limits").run(); // fresh per-visitor allowance for the race
         const racing = await Promise.all([3, 4].map(n => route.POST(request({ ...data, date: chicagoDay(9), email: `race${n}@example.com`, phone: `210555012${n}` }))));
         assert.deepEqual(racing.map(r => r.status).sort(), [201, 409], "two people racing for one slot: exactly one wins");
       });
-      await t.test("availability shows two slots a day, hides who booked, and releases cancelled slots", async () => {
+      await t.test("if Stripe is down, the hold is released and nothing is booked", async () => {
+        await reset(); stripeDown = true;
+        assert.equal((await route.POST(request(valid()))).status, 503);
+        assert.equal(await count("secure_bookings"), 0);
+        stripeDown = false;
+        assert.equal((await route.POST(request(valid()))).status, 201);
+      });
+      await t.test("availability shows two slots a day, hides who booked, and Cam's cancel refunds the deposit", async () => {
         await reset();
         const closed = await slots(chicagoDay(0), 2);
         assert.equal(closed.enabled, true);
-        assert.deepEqual(closed.days[0].slots.map(s => s.state), ["unavailable", "unavailable"], "today can't be booked");
-        assert.deepEqual(closed.days[1].slots.map(s => `${s.time} ${s.state}`), ["8:00 AM open", "1:00 PM open"]);
+        assert.deepEqual(closed.days[0].slots.map(s => s.state), ["unavailable", "unavailable", "unavailable"], "today can't be booked");
+        assert.deepEqual(closed.days[1].slots.map(s => `${s.time} ${s.state}`), ["8:00 AM open", "12:00 PM open", "4:00 PM open"]);
         assert.equal((await availability.GET(new Request("https://booking.example.com/api/availability?from=bad"))).status, 400);
-        await route.POST(request(valid()));
+        await book();
         const after = await slots(valid().date, 1);
-        assert.deepEqual(after.days[0].slots.map(s => s.state), ["taken", "open"]);
+        assert.deepEqual(after.days[0].slots.map(s => s.state), ["taken", "open", "open"]);
         assert.ok(!JSON.stringify(after).includes("audit@example.com") && !JSON.stringify(after).includes("CAM-"));
         const { code, token } = await adminLink();
         assert.equal((await decide(code, "cancel", token)).status, 200);
-        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open"], "cancelled slot is released");
+        assert.equal(refunds.length, 1, "deposit refunded when Camotive cancels"); assert.equal(refunds[0].key, `refund-${code}`);
+        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"], "cancelled slot is released");
         const cancelled = await sealed("%-cancelled");
-        assert.match(cancelled.subject, /^Cancelled/);
+        assert.match(cancelled.subject, /^Cancelled/); assert.match(cancelled.text, /refunded/);
         assert.match(Buffer.from(cancelled.attachments[0].content, "base64").toString(), /METHOD:CANCEL[\s\S]*UID:CAM-[A-F0-9]{12}@camotive[\s\S]*SEQUENCE:1/);
-        assert.equal((await route.POST(request({ ...valid(), email: "next@example.com", phone: "2105550125" }))).status, 201, "released slot can be booked again");
+        await book({ ...valid(), email: "next@example.com", phone: "2105550125" });
       });
-      await t.test("bookings confirm instantly; only Cam's private link can view and cancel", async () => {
-        await reset(); await route.POST(request(valid()));
+      await t.test("if the refund fails, Cam's cancel fails and the booking stays", async () => {
+        await reset(); await book();
+        const { code, token } = await adminLink();
+        stripeDown = true;
+        assert.equal((await decide(code, "cancel", token)).status, 503);
         assert.equal((await database.prepare("SELECT status FROM secure_bookings").first()).status, "confirmed");
+        stripeDown = false;
+        assert.equal((await decide(code, "cancel", token)).status, 200);
+      });
+      await t.test("only Cam's private link can view and cancel", async () => {
+        await reset(); await book();
         const cam = await sealed("%-cam");
-        assert.equal(cam.to, "owner@example.com"); assert.match(cam.subject, /^New booking/);
+        assert.equal(cam.to, "owner@example.com"); assert.match(cam.subject, /^New booking/); assert.match(cam.text, /deposit is paid/);
         const { code, token } = await adminLink();
         const camIcs = Buffer.from(cam.attachments[0].content, "base64").toString();
         assert.match(camIcs, /BEGIN:VEVENT/); assert.match(camIcs, new RegExp(`UID:${code}@camotive`)); assert.match(camIcs, /DTSTART:\d{8}T1[34]0000Z/, "8:00 AM Chicago is 13:00 or 14:00 UTC");
+        assert.match(camIcs, /DTEND:\d{8}T1[67]0000Z/, "the 8–11 AM window ends at 11:00 Chicago (16:00 or 17:00 UTC)");
         assert.equal((await decide(code, "view")).status, 401);
         assert.equal((await decide(code, "view", "f".repeat(64))).status, 401);
         assert.equal((await decide(code, "cancel", token, { origin: "https://evil.example" })).status, 403);
@@ -257,11 +404,56 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         const cancelled = await decide(code, "cancel", token); assert.equal(cancelled.status, 200);
         assert.equal((await cancelled.json()).booking.status, "cancelled");
         assert.equal((await decide(code, "cancel", token)).status, 409, "already cancelled");
-        assert.equal((await database.prepare("SELECT status FROM secure_bookings").first()).status, "cancelled");
+      });
+      await t.test("My appointments: emailed code, uniform responses, 5 tries, then list and cancel (deposit kept)", async () => {
+        await reset();
+        const mine = await book();
+        await book({ ...valid(), time: "12:00 PM", phone: "2105550132" });
+        const theirs = await book({ ...valid(), date: chicagoDay(12), email: "someone@example.com", phone: "2105550133" });
+        const ask = email => post(signinCode.POST, "/api/account/code", { email, turnstileToken: "valid-recovery" });
+        const known = await ask("Audit@Example.com"), unknown = await ask("nobody@example.com");
+        assert.equal(known.status, 202); assert.deepEqual(await known.json(), await unknown.json(), "doesn't reveal who has booked");
+        assert.equal((await ask("x@example.com").then(r => r.status)), 202);
+        assert.equal((await post(signinCode.POST, "/api/account/code", { email: "audit@example.com", turnstileToken: "valid-booking" })).status, 400, "bot action must match");
+        const codeEmail = await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'signin-%'").first()).payload);
+        assert.equal(codeEmail.to, "audit@example.com");
+        const otp = codeEmail.subject.match(/^(\d{6}) is your/)[1];
+        assert.ok(!JSON.stringify(await database.prepare("SELECT * FROM customer_codes").first()).includes(otp), "code stored only as a hash");
+        const tryCode = code => post(signin.POST, "/api/account/session", { email: "audit@example.com", code });
+        const wrong = otp === "000000" ? "111111" : "000000";
+        for (let i = 0; i < 5; i++) assert.equal((await tryCode(wrong)).status, 401);
+        assert.equal((await tryCode(otp)).status, 401, "locked after 5 wrong tries");
+        await ask("audit@example.com");
+        const fresh = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'signin-%' ORDER BY rowid DESC").first()).payload)).subject.slice(0, 6);
+        const ok = await tryCode(fresh); assert.equal(ok.status, 201);
+        const session = (await ok.json()).session;
+        assert.equal((await tryCode(fresh)).status, 401, "single use");
+        const list = async (token = session) => account.GET(new Request("https://booking.example.com/api/account/appointments", { headers: { authorization: `Bearer ${token}` } }));
+        assert.equal((await list("f".repeat(64))).status, 401);
+        const appointments = (await (await list()).json()).appointments;
+        assert.equal(appointments.length, 2, "only this email's bookings");
+        assert.ok(appointments.every(a => a.canCancel && a.deposit === 50 && a.email === undefined && a.phone === undefined));
+        const cancel = (code, token = session) => post(account.POST, "/api/account/appointments", { code }, { authorization: `Bearer ${token}` });
+        assert.equal((await cancel(theirs.confirmationCode)).status, 404, "can't cancel someone else's booking");
+        assert.equal((await cancel(mine.confirmationCode)).status, 200);
+        assert.equal((await cancel(mine.confirmationCode)).status, 409);
+        assert.equal(refunds.length, 0, "the deposit is kept when the customer cancels");
+        const after = (await (await list()).json()).appointments.find(a => a.code === mine.confirmationCode);
+        assert.equal(after.status, "cancelled"); assert.equal(after.cancelledBy, "customer"); assert.equal(after.refunded, false);
+        assert.match((await sealed(`${mine.confirmationCode}-cancelled`)).text, /non-refundable/);
+        assert.match((await sealed(`${mine.confirmationCode}-cancelled-cam`)).subject, /^Customer cancelled/);
+        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "taken", "open"]);
+        // The link in the confirmation email signs in too; sessions expire.
+        const access = (await sealed(`${theirs.confirmationCode}-booked`)).text.match(/#access=([a-f0-9]{64})/)[1];
+        const viaLink = await post(signin.POST, "/api/account/session", { access });
+        assert.equal(viaLink.status, 201);
+        assert.equal((await (await list((await viaLink.json()).session)).json()).appointments[0].code, theirs.confirmationCode);
+        await database.prepare("UPDATE customer_sessions SET expires = 0").run();
+        assert.equal((await list()).status, 401);
       });
       await t.test("customer text is escaped in HTML emails", async () => {
         await reset();
-        await route.POST(request({ ...valid(), name: "Eve <img src=x onerror=alert(1)>", vehicle: "Car & \"Co\" <b>bold</b>" }));
+        await book({ ...valid(), name: "Eve <img src=x onerror=alert(1)>", vehicle: "Car & \"Co\" <b>bold</b>" });
         for (const id of ["%-booked", "%-cam"]) {
           const { html } = await sealed(id);
           assert.ok(!/<img src=x|<b>bold/.test(html), id);
@@ -269,55 +461,41 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         }
       });
       await t.test("maintenance sends one reminder the day before, and none for cancelled bookings", async () => {
-        await reset(); await route.POST(request({ ...valid(), date: chicagoDay(1) }));
-        await route.POST(request({ ...valid(), date: chicagoDay(1), time: "1:00 PM", email: "gone@example.com", phone: "2105550127" }));
-        const gone = (await database.prepare("SELECT code FROM secure_bookings WHERE time = '1:00 PM'").first()).code;
+        await reset(); await book({ ...valid(), date: chicagoDay(1) });
+        const gone = (await book({ ...valid(), date: chicagoDay(1), time: "12:00 PM", email: "gone@example.com", phone: "2105550127" })).confirmationCode;
         const cams = await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE ?").bind(`${gone}-cam`).first();
         const goneToken = (await security.unseal(cams.payload)).text.match(/&token=([a-f0-9]{64})/)[1];
         assert.equal((await decide(gone, "cancel", goneToken)).status, 200);
-        const run = async () => (await (await maintenance.POST(new Request("https://booking.example.com/api/internal/booking-maintenance", { method: "POST", headers: { authorization: `Bearer ${process.env.BOOKING_CRON_SECRET}` } }))).json());
         assert.equal((await run()).reminders, 1);
         assert.equal((await run()).reminders, 0, "never twice");
-        // Sent payloads are erased from the outbox, so check what reached the email provider.
         const reminders = emails.filter(e => /^Reminder: Camotive detail tomorrow/.test(e.subject));
         assert.equal(reminders.length, 1); assert.deepEqual(reminders[0].to, ["audit@example.com"]);
         assert.ok(reminders[0].html && reminders[0].text, "sent as HTML with a plain-text part");
       });
-      await t.test("Google Calendar: bookings are added and removed, busy time blocks slots, outages fail open", () => withGoogle(async () => {
+      await t.test("Google Calendar: paid bookings are added and removed, busy time blocks slots, outages fail open", () => withGoogle(async () => {
         await reset();
         const { date } = valid();
-        // Cam is busy 2–4 PM Chicago on the day: the 1:00 PM slot is taken, 8:00 AM stays open.
         const twoPm = new Date(`${date}T19:00:00Z`).getTime() + (new Date(`${date}T12:00:00Z`).toLocaleString("en-US", { timeZone: "America/Chicago", timeZoneName: "short" }).includes("CDT") ? 0 : 3600000);
         googleBusy = [{ start: new Date(twoPm).toISOString(), end: new Date(twoPm + 2 * 3600000).toISOString() }];
-        assert.deepEqual((await slots(date, 1)).days[0].slots.map(s => s.state), ["open", "taken"]);
-        assert.equal((await route.POST(request({ ...valid(), time: "1:00 PM" }))).status, 409, "busy on Cam's calendar");
+        assert.deepEqual((await slots(date, 1)).days[0].slots.map(s => s.state), ["open", "taken", "open"]);
+        assert.equal((await route.POST(request({ ...valid(), time: "12:00 PM" }))).status, 409, "busy on Cam's calendar");
         assert.equal(await count("secure_bookings"), 0);
-
-        const booked = await (await route.POST(request(valid()))).json();
-        assert.equal(booked.status, "confirmed");
-        assert.equal(await count("booking_outbox"), 3, "two emails and one calendar job");
-        const { code, token } = await adminLink(); // read before sending erases the payloads
+        const booked = await book();
+        assert.equal(await count("booking_outbox"), 3, "two emails and one calendar job, after payment");
+        const { code, token } = await adminLink();
         await outbox.dispatchEmails(5);
         const id = `camotive${booked.confirmationCode.slice(4).toLowerCase()}`;
         const event = googleEvents.get(id);
         assert.ok(event, "event added to Cam's calendar with a stable id");
-        assert.match(event.description, /\+12105550123/); assert.equal(event.location, "100 Synthetic Street");
-        assert.equal(Date.parse(event.end.dateTime) - Date.parse(event.start.dateTime), 4 * 3600000);
-        // A retried create is harmless (409 from Google counts as done).
-        await database.prepare("UPDATE booking_outbox SET status = 'pending', attempts = 0, next_attempt = 0, lease_until = 0, payload = ? WHERE id LIKE '%-calendar'")
-          .bind(await security.seal({ kind: "calendar", op: "create", event: { code: booked.confirmationCode, date, time: "8:00 AM", title: "t", location: "l", description: "d" } })).run();
-        await outbox.dispatchEmails(5);
-        assert.equal(Number((await database.prepare("SELECT count(*) AS n FROM booking_outbox WHERE status = 'sent'").first()).n), 3);
-
+        assert.match(event.description, /\+12105550123/); assert.match(event.description, /deposit paid/); assert.equal(event.location, "100 Synthetic Street");
+        assert.equal(Date.parse(event.end.dateTime) - Date.parse(event.start.dateTime), 3 * 3600000, "the 8–11 AM window is three hours");
         assert.equal((await decide(code, "cancel", token)).status, 200);
         await outbox.dispatchEmails(5);
         assert.equal(googleEvents.has(id), false, "cancelling removes the event");
-
-        // Google outage: availability and booking keep working on the database alone; the calendar job retries.
         await reset(); googleDown = true; await new Promise(r => setTimeout(r, 0));
         const other = chicagoDay(20);
-        assert.deepEqual((await slots(other, 1)).days[0].slots.map(s => s.state), ["open", "open"]);
-        const outage = await route.POST(request({ ...valid(), date: other })); assert.equal(outage.status, 201);
+        assert.deepEqual((await slots(other, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"]);
+        await book({ ...valid(), date: other });
         await outbox.dispatchEmails(5);
         assert.equal(Number((await database.prepare("SELECT count(*) AS n FROM booking_outbox WHERE id LIKE '%-calendar' AND status = 'pending'").first()).n), 1, "calendar job waits for a retry");
         googleDown = false;
@@ -326,7 +504,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.equal(googleEvents.size, 1);
       }));
       await t.test("a delayed calendar create never re-adds a cancelled booking", () => withGoogle(async () => {
-        await reset(); await route.POST(request(valid()));
+        await reset(); await book();
         const { code, token } = await adminLink();
         assert.equal((await decide(code, "cancel", token)).status, 200);
         await outbox.dispatchEmails(10);
@@ -344,30 +522,21 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.equal(Number((await database.prepare("SELECT count(*) AS n FROM booking_outbox WHERE booking_code IS NULL").first()).n), 2);
         assert.match((await sealed("%-cam")).text, /Ceramic coating/);
       });
-      await t.test("legacy appointments block their date without enabling legacy lookup", async () => {
+      await t.test("legacy appointments block their date", async () => {
         await reset();
         await database.prepare("INSERT INTO appointments (confirmation_code, package_id, package_name, date, time, total, name, email, phone, vehicle, address, reminder) VALUES ('CAM-123456', 'full', 'Full', ?, '8:00 AM', 250, 'Legacy', 'test@example.com', '2105550123', 'Car', 'Address', 'none')").bind(valid().date).run();
         assert.equal((await route.POST(request(valid()))).status, 409);
-        assert.equal(await count("secure_bookings"), 0); assert.equal(await count("booking_outbox"), 0);
+        assert.equal(await count("secure_bookings"), 0); assert.equal(stripeSessions.size, 0);
       });
       await t.test("distributed limits are atomic and spoofed generic XFF does not bypass", async () => {
         await reset();
         const limits = await Promise.allSettled(Array.from({ length: 10 }, () => store.limit("test", "same", 3)));
         assert.equal(limits.filter(r => r.status === "fulfilled").length, 3);
-        for (let i = 0; i < 5; i++) assert.equal((await route.POST(request({ ...valid(), total: 1 }, undefined, { "x-forwarded-for": String(i) }))).status, 400);
+        for (let i = 0; i < 10; i++) assert.equal((await route.POST(request({ ...valid(), total: 1 }, undefined, { "x-forwarded-for": String(i) }))).status, 400);
         assert.equal((await route.POST(request(valid(), undefined, { "x-forwarded-for": "another" }))).status, 429);
       });
-      await t.test("recovery doesn't reveal match; rotates token and queues encrypted email", async () => {
-        await reset(); const result = await (await route.POST(request(valid()))).json();
-        const old = await database.prepare("SELECT token_hash FROM secure_bookings").first();
-        const good = await access.POST(request({ code: result.confirmationCode, email: valid().email, turnstileToken: "valid-recovery" }));
-        const bad = await access.POST(request({ code: result.confirmationCode, email: "other@example.com", turnstileToken: "valid-recovery" }));
-        assert.equal(good.status, 202); assert.deepEqual(await good.json(), await bad.json());
-        assert.equal(await count("booking_outbox"), 3);
-        assert.notEqual((await database.prepare("SELECT token_hash FROM secure_bookings").first()).token_hash, old.token_hash);
-      });
       await t.test("outbox retries use stable provider idempotency and never send SMS", async () => {
-        await reset(); await route.POST(request(valid()));
+        await reset(); await book();
         failEmail = true; assert.equal(await outbox.dispatchEmails(1), 0); const attempted = emails[0].id;
         assert.equal(await count("secure_bookings"), 1);
         await database.prepare("UPDATE booking_outbox SET next_attempt = 0").run();
@@ -377,14 +546,15 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.equal(await outbox.dispatchEmails(5), 0);
       });
       await t.test("maintenance is authenticated and purges expired booking data", async () => {
-        await reset(); await route.POST(request(valid()));
+        await reset(); await book();
         assert.equal((await maintenance.POST(new Request("https://booking.example.com/api/internal/booking-maintenance", { method: "POST" }))).status, 401);
         await database.prepare("UPDATE secure_bookings SET delete_after = 0").run();
-        const response = await maintenance.POST(new Request("https://booking.example.com/api/internal/booking-maintenance", { method: "POST", headers: { authorization: `Bearer ${process.env.BOOKING_CRON_SECRET}` } }));
-        assert.equal(response.status, 200); assert.equal(await count("secure_bookings"), 0); assert.equal(await count("booking_outbox"), 0);
+        await database.prepare("INSERT INTO customer_codes (email_hash, code_hash, expires) VALUES ('x', 'y', 0)").run();
+        assert.equal((await run()).failed, 0);
+        for (const table of ["secure_bookings", "booking_outbox", "booking_payments", "customer_codes"]) assert.equal(await count(table), 0, table);
       });
       await t.test("Vercel Cron GET with CRON_SECRET runs maintenance; wrong or weak secrets do not", async () => {
-        await reset(); await route.POST(request(valid()));
+        await reset(); await book();
         const cron = value => new Request("https://booking.example.com/api/internal/booking-maintenance", { headers: value ? { authorization: `Bearer ${value}` } : {} });
         assert.equal((await maintenance.GET(cron())).status, 401);
         assert.equal((await maintenance.GET(cron("wrong-secret-".repeat(4)))).status, 401);
@@ -395,23 +565,24 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.equal(response.status, 200); assert.equal((await response.json()).sent, 2);
         delete process.env.CRON_SECRET;
       });
-      await t.test("bookings with no queued emails are released by maintenance", async () => {
-        await reset(); await route.POST(request(valid()));
+      await t.test("a paid booking whose confirmation wasn't queued is sent by maintenance", async () => {
+        await reset(); await book();
         await database.prepare("DELETE FROM booking_outbox").run();
-        const run = () => maintenance.POST(new Request("https://booking.example.com/api/internal/booking-maintenance", { method: "POST", headers: { authorization: `Bearer ${process.env.BOOKING_CRON_SECRET}` } }));
-        await run(); assert.equal(await count("secure_bookings"), 1, "recent bookings are left alone");
-        await database.prepare("UPDATE secure_bookings SET created_at = created_at - 3600").run();
-        await run(); assert.equal(await count("secure_bookings"), 0);
+        await run();
+        assert.equal(await count("secure_bookings"), 1, "paid bookings are never deleted");
+        assert.ok(emails.some(e => /^Booked/.test(e.subject)));
       });
       if (runtime === "vercel-rest") await t.test("REST database failure doesn't permit booking", async () => {
         await reset(); dbFailure = true; assert.equal((await route.POST(request(valid()))).status, 503);
       });
-      if (runtime === "vercel-rest") await t.test("if queuing emails fails, the booking is undone and the date stays open", async () => {
-        await reset(); failOutboxInsert = true;
-        assert.equal((await route.POST(request(valid()))).status, 503);
-        assert.equal(await count("secure_bookings"), 0); assert.equal(await count("booking_outbox"), 0);
+      if (runtime === "vercel-rest") await t.test("if queuing the confirmation fails, Stripe's retry delivers it", async () => {
+        await reset(); const { confirmationCode: code } = await (await route.POST(request(valid()))).json();
+        failOutboxInsert = true;
+        const session = Object.assign(sessionFor(code), { status: "complete", payment_status: "paid", payment_intent: "pi_test_retry" });
+        assert.equal((await webhook.POST(await signed({ type: "checkout.session.completed", data: { object: session } }))).status, 503, "non-2xx makes Stripe retry");
         failOutboxInsert = false;
-        assert.equal((await route.POST(request(valid()))).status, 201);
+        assert.equal((await webhook.POST(await signed({ type: "checkout.session.completed", data: { object: session } }))).status, 200);
+        assert.equal(await count("booking_outbox"), 2);
       });
     } finally {
       globalThis.fetch = originalFetch;

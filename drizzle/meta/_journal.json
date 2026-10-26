@@ -8,6 +8,13 @@
       "when": 1791782473845,
       "tag": "0000_booking_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792913449459,
+      "tag": "0001_stripe_deposits",
+      "breakpoints": true
     }
   ]
 }
