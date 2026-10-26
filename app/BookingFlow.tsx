@@ -4,7 +4,7 @@
 // Checkout page. Payment confirms the booking; customers come back here to see it.
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
-import { prices, extras, bookingTimes, depositDollars, holdMinutes } from "../lib/booking-catalog";
+import { prices, extras, bookingTimes, depositDollars, holdMinutes, slotLabel, slotPart } from "../lib/booking-catalog";
 
 type PackageId = "full" | "premium" | "maintenance";
 type AddOnId = keyof typeof extras;
@@ -90,7 +90,7 @@ function AvailabilityCalendar({ value, time, onPick }: { value: string; time: st
       <p className="field-label">{value ? fmt(value, { weekday: "long", month: "long", day: "numeric" }) : "Choose a day"}</p>
       {selected ? <div className="slot-list">{selected.slots.map(s => <button type="button" key={s.time} disabled={s.state !== "open"} aria-pressed={time === s.time}
         className={time === s.time ? "selected" : ""} onClick={() => onPick(selected.date, s.time)}>
-        <strong>{s.time}</strong><small>{s.state === "open" ? (s.time === "8:00 AM" ? "Morning arrival" : "Afternoon arrival") : "Taken"}</small></button>)}</div>
+        <strong>{slotLabel[s.time]}</strong><small>{s.state === "open" ? slotPart[s.time] : "Taken"}</small></button>)}</div>
         : <p className="slot-hint">Days with an open dot have at least one time available. We arrive at the start of your slot.</p>}
     </div>
   </div>;
@@ -164,7 +164,7 @@ export default function BookingFlow() {
     const s = q.get("size"); if (s === "small" || s === "medium" || s === "large") setSize(s);
     const extra = q.get("addon"); if (extra && extra in extras) setAddOns([extra as AddOnId]);
     const d = q.get("date"); const t = q.get("time");
-    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { setDate(d); if (t === "8:00 AM" || t === "1:00 PM") setTime(t); }
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { setDate(d); if ((bookingTimes as readonly string[]).includes(t ?? "")) setTime(t as Slot); }
   }, [confirmPayment, restore]);
 
   const total = useMemo(() => prices[pkg][size] + addOns.reduce((n, id) => n + extras[id][1], 0), [pkg, size, addOns]);
@@ -205,7 +205,7 @@ export default function BookingFlow() {
   // sends the chosen booking to Camotive by text instead of taking the deposit.
   const textMode = !status.enabled;
   const smsBody = [`Hi Camotive, I'd like to book:`, `${serviceLine}${addOns.length ? ` + ${addOnLine}` : ""}`,
-    date && time ? `${fmt(date, { weekday: "long", month: "long", day: "numeric" })} at ${time}` : "",
+    date && time ? `${fmt(date, { weekday: "long", month: "long", day: "numeric" })}, ${slotLabel[time]}` : "",
     `Vehicle: ${contact.vehicle}`, `Address: ${contact.address}`, `${contact.name}, ${contact.phone}, ${contact.email}`, `Estimate: $${total}`].filter(Boolean).join("\n");
 
   if (done) return <div className="booking-shell" ref={top}><div className="booking-done" role="status">
@@ -214,7 +214,7 @@ export default function BookingFlow() {
     <p>Your ${done.deposit} deposit is paid and your time is reserved. We&apos;ve emailed your confirmation with a calendar invite. See you {fmt(done.date, { weekday: "long" })}.</p>
     <dl className="done-summary">
       <div><dt>Reference</dt><dd>{done.code}</dd></div>
-      <div><dt>When</dt><dd>{fmt(done.date, { weekday: "long", month: "long", day: "numeric" })}, {done.time}</dd></div>
+      <div><dt>When</dt><dd>{fmt(done.date, { weekday: "long", month: "long", day: "numeric" })}, {slotLabel[done.time] ?? done.time}</dd></div>
       <div><dt>Service</dt><dd>{done.packageName.replace(" · ", ", ")}{done.addOns ? ` + ${done.addOns}` : ""}</dd></div>
       <div><dt>Balance</dt><dd>${Math.max(0, done.total - done.deposit)} due on the day</dd></div>
     </dl>
@@ -263,7 +263,7 @@ export default function BookingFlow() {
       <h3 tabIndex={-1}>When should we come by?</h3>
       {error && <p className="form-error" role="alert">{error}</p>}
       <AvailabilityCalendar value={date} time={time} onPick={(d, t) => { setDate(d); setTime(t); setError(""); }} />
-      <div className="booking-footer"><div><small>Your time</small><strong className="selection-text">{date && time ? `${fmt(date, { weekday: "short", month: "short", day: "numeric" })}, ${time}` : "Choose a day and time"}</strong></div>
+      <div className="booking-footer"><div><small>Your time</small><strong className="selection-text">{date && time ? `${fmt(date, { weekday: "short", month: "short", day: "numeric" })}, ${slotLabel[time]}` : "Choose a day and time"}</strong></div>
         <button type="button" className="button" disabled={!date || !time} onClick={() => go(4)}>Next: your details</button></div>
     </div>}
 
@@ -277,7 +277,7 @@ export default function BookingFlow() {
         <label>Vehicle<input name="vehicle" required minLength={3} maxLength={120} value={contact.vehicle} onChange={e => setContact({ ...contact, vehicle: e.target.value })} placeholder="Year, make and model" /></label>
         <label className="wide">Service address<input name="address" autoComplete="street-address" required minLength={8} maxLength={250} value={contact.address} onChange={e => setContact({ ...contact, address: e.target.value })} placeholder="Street address, San Antonio, TX" /></label>
       </div>
-      <div className="booking-footer"><div><small>{prices[pkg].name}, {date && fmt(date, { month: "short", day: "numeric" })} at {time}</small><strong>${total}</strong></div><button className="button" type="submit">{textMode ? "Next: review" : "Next: review and pay"}</button></div>
+      <div className="booking-footer"><div><small>{prices[pkg].name}, {date && fmt(date, { month: "short", day: "numeric" })}, {time && slotLabel[time]}</small><strong>${total}</strong></div><button className="button" type="submit">{textMode ? "Next: review" : "Next: review and pay"}</button></div>
     </form>}
 
     {step === 5 && textMode && <div className="booking-panel">
@@ -286,7 +286,7 @@ export default function BookingFlow() {
       <dl className="review-list">
         <div><dt>Service</dt><dd>{serviceLine}</dd><button type="button" className="text-button" onClick={() => go(1)}>Change</button></div>
         <div><dt>Add-ons</dt><dd>{addOnLine}</dd><button type="button" className="text-button" onClick={() => go(2)}>Change</button></div>
-        <div><dt>When</dt><dd>{date && fmt(date, { weekday: "long", month: "long", day: "numeric" })}, {time}</dd><button type="button" className="text-button" onClick={() => go(3)}>Change</button></div>
+        <div><dt>When</dt><dd>{date && fmt(date, { weekday: "long", month: "long", day: "numeric" })}, {time && slotLabel[time]}</dd><button type="button" className="text-button" onClick={() => go(3)}>Change</button></div>
         <div><dt>Where</dt><dd>{contact.address}<br />{contact.vehicle}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
         <div><dt>Contact</dt><dd>{contact.name}<br />{contact.phone} · {contact.email}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
       </dl>
@@ -301,7 +301,7 @@ export default function BookingFlow() {
       <dl className="review-list">
         <div><dt>Service</dt><dd>{serviceLine}</dd><button type="button" className="text-button" onClick={() => go(1)}>Change</button></div>
         <div><dt>Add-ons</dt><dd>{addOnLine}</dd><button type="button" className="text-button" onClick={() => go(2)}>Change</button></div>
-        <div><dt>When</dt><dd>{date && fmt(date, { weekday: "long", month: "long", day: "numeric" })}, {time}</dd><button type="button" className="text-button" onClick={() => go(3)}>Change</button></div>
+        <div><dt>When</dt><dd>{date && fmt(date, { weekday: "long", month: "long", day: "numeric" })}, {time && slotLabel[time]}</dd><button type="button" className="text-button" onClick={() => go(3)}>Change</button></div>
         <div><dt>Where</dt><dd>{contact.address}<br />{contact.vehicle}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
         <div><dt>Contact</dt><dd>{contact.name}<br />{contact.phone} · {contact.email}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
       </dl>

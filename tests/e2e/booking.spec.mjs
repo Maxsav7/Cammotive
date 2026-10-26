@@ -32,7 +32,7 @@ const chicagoDay = offset => new Intl.DateTimeFormat("en-CA", { timeZone: "Ameri
 test("busy time on Cam's calendar can't be booked", async ({ page, request }) => {
   const busy = chicagoDay(2);
   const result = await (await request.get(`/api/availability?from=${busy}&days=1`)).json();
-  expect(result.days[0].slots.map(s => s.state)).toEqual(["taken", "taken"]);
+  expect(result.days[0].slots.map(s => s.state)).toEqual(["taken", "taken", "taken"]);
   await page.goto("/book");
   await page.getByRole("button", { name: "Next: add-ons" }).click();
   await page.getByRole("button", { name: "Skip: choose a time" }).click();

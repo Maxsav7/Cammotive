@@ -5,7 +5,7 @@
 // email signs them in directly. The session token lives only in this browser tab.
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
-import { depositDollars } from "../lib/booking-catalog";
+import { depositDollars, slotLabel } from "../lib/booking-catalog";
 
 type Appointment = {
   code: string; date: string; time: string; status: "confirmed" | "cancelled"; upcoming: boolean; canCancel: boolean;
@@ -126,7 +126,7 @@ export default function MyAppointments() {
         {a.status === "cancelled" ? "Cancelled" : a.upcoming ? "Confirmed" : "Completed"}</p>
       <small>{a.code}</small>
     </div>
-    <h3 id={`${a.code}-title`}>{fmt(a.date)}, {a.time}</h3>
+    <h3 id={`${a.code}-title`}>{fmt(a.date)}, {slotLabel[a.time] ?? a.time}</h3>
     <dl>
       <div><dt>Service</dt><dd>{a.packageName.replace(" · ", ", ")}{a.addOns ? ` + ${a.addOns}` : ""}</dd></div>
       <div><dt>Vehicle</dt><dd>{a.vehicle}</dd></div>

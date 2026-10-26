@@ -4,7 +4,7 @@
 import type { Email } from "./booking-outbox";
 import { configuredOrigin } from "./booking-security";
 import { appointmentIcs, toBase64 } from "./calendar";
-import { depositDollars, type bookingTimes } from "./booking-catalog";
+import { depositDollars, slotLabel, type bookingTimes } from "./booking-catalog";
 
 type Slot = (typeof bookingTimes)[number];
 export type BookingDetails = {
@@ -23,7 +23,7 @@ const firstName = (name: string) => name.trim().split(/\s+/)[0];
 const service = (d: BookingDetails) => `${d.packageName}${d.addOns ? ` + ${d.addOns}` : ""}`;
 const balance = (d: BookingDetails) => `$${d.total} estimate. $${depositDollars} deposit paid, about $${Math.max(0, d.total - depositDollars)} due when the detail is done`;
 const summary = (d: BookingDetails) =>
-  `${service(d)}\n${longDate(d.date)} at ${d.time}\n${d.vehicle}\n${d.address}\n${balance(d)} (final price confirmed before work begins)`;
+  `${service(d)}\n${longDate(d.date)}, ${slotLabel[d.time] ?? d.time} (we arrive at ${d.time})\n${d.vehicle}\n${d.address}\n${balance(d)} (final price confirmed before work begins)`;
 const arrivalNotes = [
   "Please have an outdoor water connection and a power outlet within reach of the vehicle.",
   "Make sure we can reach the parking spot (gate codes, HOA or apartment permission).",
@@ -31,7 +31,7 @@ const arrivalNotes = [
 ];
 const beforeWeArrive = `Before we arrive: ${arrivalNotes.join(" ")}`;
 const detailRows = (d: BookingDetails, code: string): Row[] => [
-  ["When", `${longDate(d.date)}\n${d.time}`], ["Service", service(d)], ["Vehicle", d.vehicle],
+  ["When", `${longDate(d.date)}\n${slotLabel[d.time] ?? d.time} (we arrive at ${d.time})`], ["Service", service(d)], ["Vehicle", d.vehicle],
   ["Address", d.address], ["Price", `${balance(d)}. Final price confirmed before we start.`], ["Reference", code],
 ];
 const invite = (code: string, d: BookingDetails, cancelled = false) => ({

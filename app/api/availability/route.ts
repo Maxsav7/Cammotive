@@ -11,7 +11,7 @@ import { busyPeriods, googleCalendarReady, overlaps, slotWindow } from "@/lib/go
 async function calendarBusy(from: string, to: string) {
   if (!googleCalendarReady()) return [];
   try {
-    return await busyPeriods(new Date(slotWindow(from, "8:00 AM")[0]), new Date(slotWindow(to, "1:00 PM")[1]));
+    return await busyPeriods(new Date(slotWindow(from, bookingTimes[0])[0]), new Date(slotWindow(to, bookingTimes[bookingTimes.length - 1])[1]));
   } catch {
     console.error("google_calendar_busy_check_failed");
     return [];

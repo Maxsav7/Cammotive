@@ -12,9 +12,9 @@ const secret = () => randomBytes(32).toString("hex");
 // A throwaway service-account key: the app signs with the private half, the fake
 // Google checks the signature with the public half.
 const google = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
-// Cam is already busy all day the day after tomorrow (Chicago), so both slots must show as taken.
+// Cam is already busy all day the day after tomorrow (Chicago), so every slot must show as taken.
 const busyDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date(Date.now() + 2 * 86400000));
-const busy = [{ start: `${busyDay}T05:00:00Z`, end: `${busyDay}T23:59:00Z` }];
+const busy = [{ start: `${busyDay}T05:00:00Z`, end: new Date(Date.parse(`${busyDay}T23:59:00Z`) + 4 * 3600000).toISOString() }];
 
 export default defineConfig({
   testDir: "tests/e2e",

@@ -1,6 +1,7 @@
 "use client";
 // "Next opening" line under the hero buttons, read from live availability.
 import { useEffect, useState } from "react";
+import { slotLabel } from "../lib/booking-catalog";
 
 export default function NextOpening() {
   const [next, setNext] = useState<{ date: string; time: string } | null>(null);
@@ -13,5 +14,5 @@ export default function NextOpening() {
   }, []);
   if (!next) return null;
   const label = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${next.date}T12:00:00Z`));
-  return <a className="next-opening" href={`/book?date=${next.date}&time=${encodeURIComponent(next.time)}`}><span aria-hidden="true" />Next opening: {label}, {next.time}</a>;
+  return <a className="next-opening" href={`/book?date=${next.date}&time=${encodeURIComponent(next.time)}`}><span aria-hidden="true" />Next opening: {label}, {slotLabel[next.time] ?? next.time}</a>;
 }

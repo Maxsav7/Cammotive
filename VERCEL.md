@@ -89,9 +89,10 @@ production.
 - Only detailing (Full, Premium, Maintenance) is booked online. Ceramic coating,
   paint correction, window tint and anything else go through `/quote`, which
   emails Cam and sends the customer an acknowledgement.
-- Two slots a day, every day: **8:00 AM and 1:00 PM** (Central time), from
+- Three appointment windows a day, every day: **8–11 AM, 12–3 PM and 4–8 PM**
+  (Central time; we arrive at the start of the window), from
   tomorrow up to 90 days ahead. Change them in `lib/booking-catalog.ts`
-  (`bookingTimes`, `slotStart`).
+  (`bookingTimes`, `slotStart`, `slotEnd`, `slotLabel`).
 - The customer picks a detail, add-ons, an open time and their details, then
   pays a **$50 deposit** on Stripe's hosted Checkout page (card details never
   touch the site). The time is held for 30 minutes while they pay. Payment

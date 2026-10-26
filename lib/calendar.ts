@@ -1,6 +1,6 @@
 // Calendar invite (.ics) for a confirmed appointment. Times are Chicago local,
 // converted to UTC so every calendar app places the event correctly.
-import { slotHours, slotStart, type bookingTimes } from "./booking-catalog";
+import { slotEnd, slotStart, type bookingTimes } from "./booking-catalog";
 
 type Slot = (typeof bookingTimes)[number];
 
@@ -13,13 +13,16 @@ function chicagoOffsetMinutes(instant: Date) {
   return Math.round((asUtc - instant.getTime()) / 60000);
 }
 
-export function slotToUtc(date: string, time: Slot) {
-  const [hour, minute] = slotStart[time].split(":").map(Number);
-  const guess = new Date(`${date}T${slotStart[time]}:00Z`);
+// A Chicago wall-clock time ("13:00") on a date, as a UTC instant.
+function chicagoToUtc(date: string, clock: string) {
+  const [hour, minute] = clock.split(":").map(Number);
+  const guess = new Date(`${date}T${clock}:00Z`);
   const offset = chicagoOffsetMinutes(guess);
   const utc = new Date(Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10), hour, minute) - offset * 60000);
   return utc;
 }
+export const slotToUtc = (date: string, time: Slot) => chicagoToUtc(date, slotStart[time]);
+export const slotEndUtc = (date: string, time: Slot) => chicagoToUtc(date, slotEnd[time]);
 
 const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 const escape = (v: string) => v.replace(/\\/g, "\\\\").replace(/[;,]/g, m => `\\${m}`).replace(/\r?\n/g, "\\n");
@@ -28,7 +31,7 @@ const escape = (v: string) => v.replace(/\\/g, "\\\\").replace(/[;,]/g, m => `\\
 // imported the original can match it and mark that event cancelled.
 export function appointmentIcs({ code, date, time, service, address, cancelled = false }: { code: string; date: string; time: Slot; service: string; address: string; cancelled?: boolean }) {
   const start = slotToUtc(date, time);
-  const end = new Date(start.getTime() + slotHours * 3600000);
+  const end = slotEndUtc(date, time);
   const lines = [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Camotive Detailing//Booking//EN", "CALSCALE:GREGORIAN", cancelled ? "METHOD:CANCEL" : "METHOD:PUBLISH",
     "BEGIN:VEVENT",
