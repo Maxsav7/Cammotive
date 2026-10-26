@@ -17,16 +17,22 @@ async function slotTaken(date: string, time: string) {
 }
 
 // What a retried request (same Idempotency-Key) gets back: the same payment page
-// while the hold is live, or the booking's outcome. Never PII or tokens.
+// while the hold is live, or the booking's outcome. Never PII or tokens. A retry
+// that arrives while the first request is still creating the Stripe session (a
+// double click) waits briefly for it rather than reporting the slot as taken.
 async function replay(requestKey: string, fingerprint: string, calculated: object) {
-  const row = await db.prepare(`SELECT b.code, b.fingerprint, b.status, p.checkout_url, p.hold_expires FROM secure_bookings b
-    LEFT JOIN booking_payments p ON p.code = b.code WHERE b.request_key = ?`).bind(requestKey).first();
-  if (!row) return null;
-  if (row.fingerprint !== fingerprint) throw new HttpError(409, "This request key was already used. Start a new booking.");
-  if (row.status === "confirmed") return json({ confirmationCode: row.code, ...calculated, deposit: depositDollars, status: "confirmed" });
-  if (row.status === "pending" && row.checkout_url && Number(row.hold_expires) > Date.now() / 1000)
-    return json({ confirmationCode: row.code, ...calculated, deposit: depositDollars, status: "pending", checkoutUrl: row.checkout_url });
-  throw new HttpError(409, "This booking wasn't paid in time, so the slot was released. Please choose a time again.");
+  for (let attempt = 0; ; attempt++) {
+    const row = await db.prepare(`SELECT b.code, b.fingerprint, b.status, b.created_at, p.checkout_url, p.hold_expires FROM secure_bookings b
+      LEFT JOIN booking_payments p ON p.code = b.code WHERE b.request_key = ?`).bind(requestKey).first();
+    if (!row) return null;
+    if (row.fingerprint !== fingerprint) throw new HttpError(409, "This request key was already used. Start a new booking.");
+    if (row.status === "confirmed") return json({ confirmationCode: row.code, ...calculated, deposit: depositDollars, status: "confirmed" });
+    if (row.status === "pending" && row.checkout_url && Number(row.hold_expires) > Date.now() / 1000)
+      return json({ confirmationCode: row.code, ...calculated, deposit: depositDollars, status: "pending", checkoutUrl: row.checkout_url });
+    const starting = row.status === "pending" && !row.checkout_url && Number(row.created_at) > Date.now() / 1000 - 30;
+    if (!starting || attempt >= 40) throw new HttpError(409, "This booking wasn't paid in time, so the slot was released. Please choose a time again.");
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
 }
 
 // A customer books a detailing slot. The slot is held for 30 minutes while they pay
@@ -46,7 +52,11 @@ export async function POST(request: Request) {
     const previous = await replay(requestKey, fingerprint, calculated);
     if (previous) return previous;
     await releaseStaleHolds(details.date, details.time);
-    if (await slotTaken(details.date, details.time)) throw new HttpError(409, TAKEN);
+    if (await slotTaken(details.date, details.time)) {
+      const again = await replay(requestKey, fingerprint, calculated); // our own concurrent request may hold it
+      if (again) return again;
+      throw new HttpError(409, TAKEN);
+    }
     if (await slotBusyOnCalendar(details.date, details.time)) throw new HttpError(409, TAKEN);
     await verifyBot(turnstileToken, "booking");
     await limit("recipient-email", details.email, 4, 86400);

@@ -50,7 +50,7 @@ function AvailabilityCalendar({ value, time, onPick }: { value: string; time: st
     try {
       const response = await fetch(`/api/availability?from=${start}&days=42`, { cache: "no-store" });
       const data = await response.json();
-      if (!response.ok || !data.enabled) throw new Error();
+      if (!response.ok || !data.days?.length) throw new Error();
       setDays(Object.fromEntries((data.days as Day[]).map(d => [d.date, d])));
     } catch { setError(true); }
     finally { setLoading(false); }
@@ -201,7 +201,12 @@ export default function BookingFlow() {
     <p className="eyebrow">Payment received</p><h3 tabIndex={-1}>Confirming your booking…</h3><p>This takes a few seconds. Please keep this page open.</p></div></div>;
 
   if (!status) return <div className="booking-panel"><p>Checking availability…</p></div>;
-  if (!status.enabled) return <div className="booking-panel"><p>Online booking is temporarily unavailable. Call or text Camotive to schedule.</p><a className="button" href="tel:+12105730671">Call {PHONE}</a></div>;
+  // Until online payment is set up, every step works the same, but the last one
+  // sends the chosen booking to Camotive by text instead of taking the deposit.
+  const textMode = !status.enabled;
+  const smsBody = [`Hi Camotive, I'd like to book:`, `${serviceLine}${addOns.length ? ` + ${addOnLine}` : ""}`,
+    date && time ? `${fmt(date, { weekday: "long", month: "long", day: "numeric" })} at ${time}` : "",
+    `Vehicle: ${contact.vehicle}`, `Address: ${contact.address}`, `${contact.name}, ${contact.phone}, ${contact.email}`, `Estimate: $${total}`].filter(Boolean).join("\n");
 
   if (done) return <div className="booking-shell" ref={top}><div className="booking-done" role="status">
     <p className="eyebrow"><span className="status-dot" aria-hidden="true" />Confirmed</p>
@@ -223,7 +228,7 @@ export default function BookingFlow() {
 
   return <div className="booking-shell" ref={top}>
     <ol className="booking-progress" aria-label="Booking steps">
-      {steps.map((label, i) => <li key={label} className={step > i + 1 ? "done" : step === i + 1 ? "current" : ""} aria-current={step === i + 1 ? "step" : undefined}>
+      {(textMode ? [...steps.slice(0, 4), "Send"] : steps).map((label, i) => <li key={label} className={step > i + 1 ? "done" : step === i + 1 ? "current" : ""} aria-current={step === i + 1 ? "step" : undefined}>
         <span>{step > i + 1 ? "✓" : i + 1}</span><small>{label}</small></li>)}
     </ol>
     {notice && <p className="booking-notice" role="status">{notice}</p>}
@@ -272,10 +277,25 @@ export default function BookingFlow() {
         <label>Vehicle<input name="vehicle" required minLength={3} maxLength={120} value={contact.vehicle} onChange={e => setContact({ ...contact, vehicle: e.target.value })} placeholder="Year, make and model" /></label>
         <label className="wide">Service address<input name="address" autoComplete="street-address" required minLength={8} maxLength={250} value={contact.address} onChange={e => setContact({ ...contact, address: e.target.value })} placeholder="Street address, San Antonio, TX" /></label>
       </div>
-      <div className="booking-footer"><div><small>{prices[pkg].name}, {date && fmt(date, { month: "short", day: "numeric" })} at {time}</small><strong>${total}</strong></div><button className="button" type="submit">Next: review and pay</button></div>
+      <div className="booking-footer"><div><small>{prices[pkg].name}, {date && fmt(date, { month: "short", day: "numeric" })} at {time}</small><strong>${total}</strong></div><button className="button" type="submit">{textMode ? "Next: review" : "Next: review and pay"}</button></div>
     </form>}
 
-    {step === 5 && <form className="booking-panel" onSubmit={pay}>
+    {step === 5 && textMode && <div className="booking-panel">
+      <button type="button" className="back" onClick={() => go(4)}>Back</button>
+      <h3 tabIndex={-1}>Review and send your booking</h3>
+      <dl className="review-list">
+        <div><dt>Service</dt><dd>{serviceLine}</dd><button type="button" className="text-button" onClick={() => go(1)}>Change</button></div>
+        <div><dt>Add-ons</dt><dd>{addOnLine}</dd><button type="button" className="text-button" onClick={() => go(2)}>Change</button></div>
+        <div><dt>When</dt><dd>{date && fmt(date, { weekday: "long", month: "long", day: "numeric" })}, {time}</dd><button type="button" className="text-button" onClick={() => go(3)}>Change</button></div>
+        <div><dt>Where</dt><dd>{contact.address}<br />{contact.vehicle}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
+        <div><dt>Contact</dt><dd>{contact.name}<br />{contact.phone} · {contact.email}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
+      </dl>
+      <p className="text-mode-note" role="note">Online payment isn&apos;t available yet. Send this booking to us by text and we&apos;ll confirm your time and how to pay the ${depositDollars} deposit that holds it.</p>
+      <div className="booking-footer"><div><small>Estimated total</small><strong>${total}</strong></div>
+        <div className="hero-actions"><a className="outline-button" href="tel:+12105730671">Call {PHONE}</a><a className="button" href={`sms:+12105730671?&body=${encodeURIComponent(smsBody)}`}>Text us this booking</a></div></div>
+    </div>}
+
+    {step === 5 && !textMode && <form className="booking-panel" onSubmit={pay}>
       <button type="button" className="back" onClick={() => go(4)}>Back</button>
       <h3 tabIndex={-1}>Review and pay the deposit</h3>
       <dl className="review-list">

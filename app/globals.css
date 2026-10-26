@@ -832,3 +832,6 @@ p { text-wrap: pretty; }
   .appointment-card { padding: 20px; }
   .appointment-card dl > div { grid-template-columns: 1fr; gap: 2px; }
 }
+.text-mode-note { margin: 22px 0 4px; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line-strong); background: color-mix(in srgb, #e8c872 8%, var(--surface)); font-size: 15px; line-height: 1.55; }
+.booking-footer .hero-actions { justify-content: flex-end; }
+@media (max-width: 540px) { .booking-footer .hero-actions { flex-direction: column-reverse; align-items: stretch; } }

@@ -82,7 +82,7 @@ export default function Site({ page = "home" }: { page?: string }) {
     reviews: ["What our customers say.", "Rated 5.0 on Google. Read what our customers say about their detail."],
     about: ["About us.", "Camotive is a mobile detailing business in San Antonio, owned and run by Camron Freeman."],
     contact: ["Let's talk about your vehicle.", "Questions about a service, your location or your paint? Call or text us directly."],
-    book: ["Book your detail.", "Choose your detail and add-ons, pick an open time, and pay a ${depositDollars} deposit to confirm it."],
+    book: ["Book your detail.", `Choose your detail and add-ons, pick an open time, and pay a $${depositDollars} deposit to confirm it.`],
     quote: ["Request a quote.", "Ceramic coating and paint correction are quoted after we understand your vehicle. Tell us about it and we'll reply within one business day."],
     appointment: ["My appointments.", "See every detail you've booked with us, or cancel an upcoming one. We'll email you a code to sign in."],
   };

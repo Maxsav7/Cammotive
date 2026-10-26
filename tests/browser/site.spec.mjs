@@ -53,11 +53,32 @@ test("the header fits at every tablet width", async ({ page }) => {
   }
 });
 
-test("unconfigured booking shows the call/text fallback, never a form", async ({ page }) => {
-  await page.goto("/book");
-  await expect(page.getByText("Online booking is temporarily unavailable")).toBeVisible();
+test("before payment is set up, every booking step works and the last one sends the booking by text", async ({ page }) => {
+  const posts = [];
+  page.on("request", r => { if (r.method() === "POST" && r.url().includes("/api/")) posts.push(r.url()); });
+  await page.goto("/book?service=full&size=small");
+  await expect(page.locator("h1")).toContainText("Book your detail.");
+  await expect(page.locator(".inner-hero")).toContainText("pay a $50 deposit");
+  await page.getByRole("button", { name: "Next: add-ons" }).click();
+  await page.getByLabel(/Engine bay cleaning/).check();
+  await page.getByRole("button", { name: "Next: choose a time" }).click();
+  await expect(page.locator('.availability-calendar[aria-busy="false"]')).toBeVisible();
+  await page.locator('.calendar-days button[data-state="open"]:not(:disabled)').first().click();
+  await page.locator(".slot-list button:not(:disabled)").first().click();
+  await page.getByRole("button", { name: "Next: your details" }).click();
+  await page.getByLabel("Full name").fill("Test Customer");
+  await page.getByLabel("Mobile number").fill("(210) 555-0123");
+  await page.getByLabel("Email").fill("test@example.com");
+  await page.getByLabel("Vehicle").fill("2022 Porsche 911");
+  await page.getByLabel("Service address").fill("123 Main Street, San Antonio, TX");
+  await page.getByRole("button", { name: "Next: review" }).click();
+  await expect(page.locator(".text-mode-note")).toContainText("Online payment isn't available yet");
+  const text = page.getByRole("link", { name: "Text us this booking" });
+  const body = decodeURIComponent((await text.getAttribute("href")).split("body=")[1]);
+  for (const part of ["Full Detail, small + Engine bay cleaning", "2022 Porsche 911", "123 Main Street", "test@example.com", "Estimate: $325"]) expect(body).toContain(part);
   await expect(page.locator('.booking-panel a[href^="tel:"]')).toBeVisible();
-  await expect(page.locator("form input[type=email]")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Pay \$50/ })).toHaveCount(0);
+  expect(posts, "nothing is submitted while booking is off").toEqual([]);
 });
 
 test("schedule buttons lead to the booking page", async ({ page }) => {
