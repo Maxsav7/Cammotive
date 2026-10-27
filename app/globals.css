@@ -113,8 +113,8 @@ p { text-wrap: pretty; }
 .brand { display: inline-flex; flex: none; }
 /* Logo: the brand artwork as one image (app/Logo.tsx). Height sets its size; width follows. */
 .logo { display: block; height: 46px; width: auto; }
-/* The silver artwork is made for dark grounds; on the light theme it sits on a graphite plate. */
-.site-shell[data-theme="light"] .logo { padding: 5px 10px; border-radius: 10px; background: #121117; }
+/* The logo always sits on its own graphite badge, so it looks the same in light and dark mode. */
+.logo { padding: 5px 10px; border-radius: 10px; background: #121117; }
 
 /* ---------- Header ---------- */
 .header-wrap { position: sticky; top: 0; z-index: 80; height: 76px; }
