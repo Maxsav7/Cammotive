@@ -4,7 +4,7 @@ export default function MeetTheOwner() {
     <div className="owner-copy">
       <p className="eyebrow">Meet the owner</p>
       <h2 id="owner-heading">Driven by detail.</h2>
-      <p className="owner-lede">I&apos;m Camron, the owner of Camotive Detailing and a marketing student at UTSA. I&apos;m building my business here in San Antonio with a simple goal: deliver work I&apos;m proud to put my name on and give people someone they can trust with their vehicle.</p>
+      <p>I&apos;m Camron, the owner of Camotive Detailing and a marketing student at UTSA. I&apos;m building my business here in San Antonio with a simple goal: deliver work I&apos;m proud to put my name on and give people someone they can trust with their vehicle.</p>
       <p>My experience in detailing and ceramic coatings has taught me that a great finish starts with careful preparation. I bring that same attention to every vehicle I work on through Camotive.</p>
       <p>Through Camotive, I offer mobile detailing, polishing, and ceramic coatings to help keep your vehicle looking its best. Whether you&apos;re getting a maintenance detail or investing in long-term protection, I take the time to understand what your vehicle needs and explain your options clearly.</p>
       <p>Outside of work and school, you&apos;ll usually find me in the gym, out in nature, or staying active through sports. Being an athlete has taught me discipline, patience, and consistency—qualities I bring to Camotive every day as I continue building my business and improving my craft.</p>
