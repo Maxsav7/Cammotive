@@ -571,13 +571,13 @@ p { text-wrap: pretty; }
 .owner-photo { margin: 0; padding: 1px; border-radius: 26px; background: var(--chrome); box-shadow: 0 40px 80px -40px #000; }
 .site-shell[data-theme="light"] .owner-photo { box-shadow: 0 30px 60px -36px #1211174d; }
 .owner-photo img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 25px; }
-.owner-copy { max-width: 36em; }
-.owner-copy h2 { margin-bottom: 26px; }
-.owner-copy > p:not(.eyebrow) { font-size: 17px; line-height: 1.7; color: var(--muted); }
-.owner-copy > p + p { margin-top: 18px; }
-.owner-copy > p.owner-lede { font-size: 20px; line-height: 1.6; color: var(--text); }
-.owner-copy > p.owner-signature { display: flex; flex-direction: column; gap: 4px; margin-top: 34px; padding-top: 24px; border-top: 1px solid var(--line); }
-.owner-signature strong { font-size: 24px; font-weight: 700; font-stretch: 118%; color: var(--text); }
+.owner-copy { max-width: 34em; }
+.owner-copy h2 { margin-bottom: 24px; }
+/* One body style for the whole story, matching the site's other long-form copy. */
+.owner-copy > p:not(.eyebrow) { font-size: 18px; line-height: 1.65; color: var(--muted); }
+.owner-copy > p + p { margin-top: 16px; }
+.owner-copy > p.owner-signature { display: flex; flex-direction: column; gap: 4px; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); }
+.owner-signature strong { font-size: 22px; font-weight: 620; font-stretch: 112%; letter-spacing: -0.01em; color: var(--text); }
 .owner-signature span { font-size: 15px; }
 
 @media (max-width: 1100px) {
