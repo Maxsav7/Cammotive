@@ -141,6 +141,8 @@ export default function Site({ page = "home" }: { page?: string }) {
   </section>;
 
   const quoteCta = quotePages.includes(page);
+  // Cam's dashboard is a work tool, not a marketing page: no site header, footer or calls to action.
+  if (page === "admin") return <main className="site-shell inner-page admin-shell" data-theme={theme}><AdminDashboard /></main>;
   return (
     <main className={`site-shell ${isHome ? "home-page" : "inner-page"}`} data-theme={theme}>
       <a className="skip-link" href="#main-content">Skip to content</a>

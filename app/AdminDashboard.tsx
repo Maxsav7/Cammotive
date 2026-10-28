@@ -6,6 +6,7 @@
 // his phone; signing out removes it.
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
+import Logo from "./Logo";
 import { bookingTimes, slotLabel } from "../lib/booking-catalog";
 
 type Job = {
@@ -127,61 +128,69 @@ export default function AdminDashboard() {
     return [...groups.entries()];
   }, [data]);
 
-  if (!status) return <section className="section admin"><p>Loading…</p></section>;
-  if (!status.dashboard) return <section className="section admin"><div className="signin-card"><h1>Dashboard</h1>
+  if (!status) return <section className="admin-gate"><p className="admin-muted">Loading…</p></section>;
+  if (!status.dashboard) return <section className="admin-gate"><div className="signin-card"><Logo /><h1>Dashboard</h1>
     <p>The dashboard turns on once the booking database and email are connected (steps 1–5 in VERCEL.md).</p></div></section>;
 
-  if (stage !== "dash") return <section className="section admin">
+  if (stage !== "dash") return <section className="admin-gate">
     {stage === "email" ? <form className="signin-card" onSubmit={requestCode}>
-      <p className="eyebrow">Camotive</p><h1>Dashboard sign-in</h1>
+      <Logo /><h1>Dashboard sign-in</h1>
       <p>Enter the owner&apos;s email. We&apos;ll send a 6-digit code to sign in.</p>
       <label>Email<input type="email" autoComplete="email" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
       <BookingChallenge key={challenge} siteKey={status.siteKey!} action="recovery" onToken={setBotToken} />
       <button className="button" disabled={busy || !botToken}>{busy ? "Sending…" : "Email me a code"}</button>
     </form> : <form className="signin-card" onSubmit={verify}>
-      <p className="eyebrow">Camotive</p><h1>Enter your code</h1>
+      <Logo /><h1>Enter your code</h1>
       <p>Sent to <strong>{email}</strong> if it&apos;s the owner&apos;s address. It expires in 15 minutes.</p>
       <label>6-digit code<input inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} required value={code}
         onChange={e => setCode(e.target.value.replace(/\D/g, ""))} className="code-input" /></label>
       <button className="button" disabled={busy || code.length !== 6}>{busy ? "Checking…" : "Sign in"}</button>
       <button type="button" className="text-button" onClick={() => { setStage("email"); setMessage(""); }}>Send a new code</button>
     </form>}
-    {message && <p className="manage-message" role="status">{message}</p>}
+    {message && <p className="admin-toast" role="status">{message}</p>}
   </section>;
 
   const today = data!.today;
+  const todayJobs = data!.upcoming.filter(j => j.date === today);
   const thisWeek = data!.upcoming.filter(j => j.date <= shift(today, 6)).length;
-  const openQuotes = data!.quotes.filter(q => q.status === "new").length;
-  const dayLabel = (date: string) => date === today ? `Today · ${fmt(date)}` : date === shift(today, 1) ? `Tomorrow · ${fmt(date)}` : fmt(date);
+  const newQuotes = data!.quotes.filter(q => q.status === "new");
+  const collect = (j: Job) => Math.max(0, j.total - (j.paid ? j.deposit : 0));
+  const dayName = (date: string) => date === today ? "Today" : date === shift(today, 1) ? "Tomorrow" : fmt(date, { weekday: "long" });
+  const shownQuotes = data!.quotes.filter(q => quoteFilter === "all" || q.status === "new");
 
   const jobCard = (j: Job, past = false) => <article key={j.code} className={`admin-job ${j.status}`} aria-labelledby={`${j.code}-h`}>
-    <div className="admin-job-head">
-      <h4 id={`${j.code}-h`}>{past ? `${fmt(j.date, { weekday: "short", month: "short", day: "numeric" })}, ` : ""}{slotLabel[j.time] ?? j.time}</h4>
-      <div className="admin-badges">{j.moved && <span className="badge">Moved</span>}
-        {j.status === "cancelled" && <span className="badge badge-cancelled">{j.cancelledBy === "customer" ? "Cancelled by customer" : "Cancelled by you"}{j.refunded ? " · refunded" : ""}</span>}</div>
+    <div className="job-time">
+      <strong id={`${j.code}-h`}>{past ? `${fmt(j.date, { month: "short", day: "numeric" })} · ` : ""}{slotLabel[j.time] ?? j.time}</strong>
+      {j.moved && <span className="badge">Moved</span>}
+      {j.status === "cancelled" && <span className="badge badge-cancelled">{j.cancelledBy === "customer" ? "Customer cancelled" : "You cancelled"}{j.refunded ? " · refunded" : ""}</span>}
     </div>
-    <p className="admin-job-service">{service(j)}</p>
-    <p className="admin-job-customer"><strong>{j.name}</strong> · {j.vehicle}</p>
-    {!past && <div className="admin-contact">
-      <a className="chip" href={`tel:${j.phone}`}>Call</a><a className="chip" href={`sms:${j.phone}`}>Text</a>
-      <a className="chip" href={maps(j.address)} target="_blank" rel="noopener noreferrer">Directions</a><a className="chip" href={`mailto:${j.email}`}>Email</a>
+    <div className="job-main">
+      <p className="job-who"><strong>{j.name}</strong> <span>{j.vehicle}</span></p>
+      <p className="job-what">{service(j)}</p>
+      {!past && <a className="job-where" href={maps(j.address)} target="_blank" rel="noopener noreferrer">{j.address}</a>}
+    </div>
+    <div className="job-money">
+      {j.status === "cancelled" ? <span className="admin-muted">{j.refunded ? `$${j.deposit} refunded` : j.paid ? `$${j.deposit} deposit kept` : "No deposit"}</span>
+        : <><strong>${collect(j)}</strong><span>{past ? "collected on the day" : "to collect"}</span><small>${j.total} total · {j.paid ? `$${j.deposit} paid` : "no deposit"}</small></>}
+    </div>
+    {!past && <div className="job-actions">
+      <a className="icon-button" href={`tel:${j.phone}`} aria-label={`Call ${j.name}, ${phone(j.phone)}`}><Icon d={icons.phone} />Call</a>
+      <a className="icon-button" href={`sms:${j.phone}`} aria-label={`Text ${j.name}`}><Icon d={icons.text} />Text</a>
+      <a className="icon-button" href={maps(j.address)} target="_blank" rel="noopener noreferrer" aria-label={`Directions to ${j.address}`}><Icon d={icons.pin} />Directions</a>
+      <a className="icon-button icon-only" href={`mailto:${j.email}`} aria-label={`Email ${j.name}`} title={j.email}><Icon d={icons.mail} /></a>
+      <span className="job-ref">{j.code}</span>
+      {open?.code !== j.code && <>
+        <button className="ghost-button" type="button" onClick={() => { setOpen({ code: j.code, kind: "move" }); setMoveTo({ date: j.date, time: "" }); setMessage(""); }}>Move</button>
+        <button className="ghost-button danger" type="button" onClick={() => { setOpen({ code: j.code, kind: "cancel" }); setMessage(""); }}>Cancel &amp; refund</button>
+      </>}
     </div>}
-    <dl className="admin-job-facts">
-      <div><dt>Address</dt><dd>{j.address}</dd></div>
-      <div><dt>Phone</dt><dd>{phone(j.phone)}</dd></div>
-      <div><dt>Payment</dt><dd>${j.total} estimate · {j.paid ? `$${j.deposit} deposit paid · $${Math.max(0, j.total - j.deposit)} to collect` : "no deposit recorded"}</dd></div>
-      <div><dt>Reference</dt><dd>{j.code}</dd></div>
-    </dl>
-    {!past && (open?.code !== j.code ? <div className="hero-actions admin-actions">
-      <button className="outline-button" type="button" onClick={() => { setOpen({ code: j.code, kind: "move" }); setMoveTo({ date: j.date, time: "" }); setMessage(""); }}>Move</button>
-      <button className="outline-button" type="button" onClick={() => { setOpen({ code: j.code, kind: "cancel" }); setMessage(""); }}>Cancel &amp; refund</button>
-    </div> : open.kind === "cancel" ? <div className="manage-confirm" role="group" aria-label="Cancel this booking?">
+    {!past && open?.code === j.code && (open.kind === "cancel" ? <div className="job-panel danger" role="group" aria-label="Cancel this booking?">
       <p>Cancel {j.name.split(" ")[0]}&apos;s booking? {j.paid ? `The $${j.deposit} deposit is refunded automatically, ` : ""}they get an email, and the window opens up again.</p>
-      <div className="hero-actions">
+      <div className="job-panel-actions">
         <button className="button danger-button" type="button" disabled={busy} onClick={() => act({ action: "cancel", code: j.code }, "Cancelled and the customer has been emailed.")}>{busy ? "Cancelling…" : "Yes, cancel it"}</button>
-        <button className="outline-button" type="button" disabled={busy} onClick={() => setOpen(null)}>Keep it</button>
+        <button className="ghost-button" type="button" disabled={busy} onClick={() => setOpen(null)}>Keep it</button>
       </div>
-    </div> : <form className="admin-move" onSubmit={e => { e.preventDefault(); if (moveTo.date && moveTo.time) act({ action: "reschedule", code: j.code, date: moveTo.date, time: moveTo.time }, "Moved. The customer has been emailed the new time with an updated invite."); }}>
+    </div> : <form className="job-panel" onSubmit={e => { e.preventDefault(); if (moveTo.date && moveTo.time) act({ action: "reschedule", code: j.code, date: moveTo.date, time: moveTo.time }, "Moved. The customer has been emailed the new time with an updated invite."); }}>
       <label>New date<input type="date" required min={today} value={moveTo.date} onChange={e => setMoveTo({ date: e.target.value, time: "" })} /></label>
       <fieldset><legend>Window</legend><div className="admin-windows">
         {bookingTimes.map(t => {
@@ -191,69 +200,99 @@ export default function AdminDashboard() {
             checked={moveTo.time === t} onChange={() => setMoveTo({ ...moveTo, time: t })} />{slotLabel[t]}<small>{current ? "Current" : state === "taken" ? "Taken" : state === "unavailable" ? "Closed" : "Open"}</small></label>;
         })}
       </div></fieldset>
-      <div className="hero-actions"><button className="button" disabled={busy || !moveTo.date || !moveTo.time}>{busy ? "Moving…" : "Move and email customer"}</button>
-        <button className="outline-button" type="button" onClick={() => setOpen(null)}>Never mind</button></div>
+      <div className="job-panel-actions"><button className="button" disabled={busy || !moveTo.date || !moveTo.time}>{busy ? "Moving…" : "Move and email customer"}</button>
+        <button className="ghost-button" type="button" onClick={() => setOpen(null)}>Never mind</button></div>
     </form>)}
   </article>;
 
-  return <section className="section admin">
-    <div className="admin-head">
-      <div><p className="eyebrow">Camotive</p><h1>Dashboard</h1></div>
-      <div className="hero-actions"><button type="button" className="outline-button" disabled={busy} onClick={() => session && load(session)}>Refresh</button>
-        <button type="button" className="text-button" onClick={() => signOut()}>Sign out</button></div>
+  const quoteCard = (q: Quote) => <article key={q.reference} className={`admin-quote ${q.status}`}>
+    <div className="quote-head"><strong>{q.service}</strong><span className={`badge ${q.status === "replied" ? "" : "badge-new"}`}>{q.status === "replied" ? "Replied" : "New"}</span></div>
+    <p className="job-who"><strong>{q.name}</strong> <span>{q.vehicle}</span></p>
+    <p className="quote-meta">{q.timing ? `${q.timing} · ` : ""}{new Date(q.receivedAt * 1000).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+    {q.notes && <p className="quote-notes">{q.notes}</p>}
+    <div className="job-actions">
+      <a className="icon-button" href={`tel:${q.phone}`} aria-label={`Call ${q.name}`}><Icon d={icons.phone} />Call</a>
+      <a className="icon-button" href={`sms:${q.phone}`} aria-label={`Text ${q.name}`}><Icon d={icons.text} />Text</a>
+      <a className="icon-button" href={`mailto:${q.email}?subject=${encodeURIComponent(`Your ${q.service.toLowerCase()} quote`)}`} aria-label={`Email ${q.name}`}><Icon d={icons.mail} />Email</a>
+      <button className="ghost-button" type="button" disabled={busy} onClick={() => act({ action: "quote", reference: q.reference, status: q.status === "new" ? "replied" : "new" }, q.status === "new" ? "Marked as replied." : "Moved back to needs a reply.")}>
+        {q.status === "new" ? "Mark replied" : "Mark as needing a reply"}</button>
     </div>
-    {!status.enabled && <p className="admin-note">Online payment isn&apos;t live yet, so customers send bookings by text for now. Blocking time already works: blocked windows show as taken on the booking page.</p>}
-    <dl className="admin-stats">
-      <div><dt>Today</dt><dd>{data!.upcoming.filter(j => j.date === today).length}</dd></div>
-      <div><dt>Next 7 days</dt><dd>{thisWeek}</dd></div>
-      <div><dt>Open quotes</dt><dd>{openQuotes}</dd></div>
-    </dl>
-    <div className="admin-tabs" role="tablist" aria-label="Dashboard sections">
-      {([["jobs", "Jobs"], ["time", "Block time"], ["quotes", `Quotes${openQuotes ? ` (${openQuotes})` : ""}`]] as const).map(([id, label]) =>
-        <button key={id} role="tab" type="button" aria-selected={tab === id} className={tab === id ? "selected" : ""} onClick={() => { setTab(id); setMessage(""); setOpen(null); }}>{label}</button>)}
-    </div>
-    {message && <p className="manage-message" role="status">{message}</p>}
+  </article>;
 
-    {tab === "jobs" && <div className="admin-panel" role="tabpanel" aria-label="Jobs">
-      {days.length === 0 && <p className="empty-note">No upcoming jobs yet.</p>}
-      {days.map(([date, jobs]) => <section key={date} className="admin-day" aria-label={dayLabel(date)}><h3>{dayLabel(date)}</h3>{jobs.map(j => jobCard(j))}</section>)}
-      {data!.recent.length > 0 && <details className="admin-recent"><summary>Last 30 days and cancelled ({data!.recent.length})</summary>{data!.recent.map(j => jobCard(j, true))}</details>}
-    </div>}
+  return <section className="admin" data-tab={tab}>
+    <header className="admin-bar">
+      <a className="brand" href="/" aria-label="Camotive Detailing website"><Logo /></a>
+      <h1 className="admin-bar-title">Dashboard</h1>
+      <div className="admin-bar-actions">
+        <button type="button" className="icon-button" disabled={busy} onClick={() => session && load(session)} aria-label="Refresh"><Icon d={icons.refresh} /><span className="label-wide">Refresh</span></button>
+        <button type="button" className="ghost-button" onClick={() => signOut()}>Sign out</button>
+      </div>
+    </header>
 
-    {tab === "time" && <div className="admin-panel" role="tabpanel" aria-label="Block time">
-      <form className="admin-block" onSubmit={e => { e.preventDefault(); if (block.date && block.times.length) act({ action: "block", date: block.date, times: block.times }, `Blocked ${fmt(block.date)}.`); }}>
-        <h3>Block off time</h3>
-        <p>Blocked windows show as taken on the booking page. Existing bookings aren&apos;t affected.</p>
-        <label>Date<input type="date" required min={today} value={block.date} onChange={e => setBlock({ ...block, date: e.target.value })} /></label>
-        <fieldset><legend>What to block</legend><div className="admin-windows">
-          {(["all", ...bookingTimes] as string[]).map(t => <label key={t} className={block.times.includes(t) ? "selected" : ""}>
-            <input type="checkbox" checked={block.times.includes(t)} onChange={() => setBlock({ ...block, times: t === "all" ? ["all"] : block.times.includes(t) ? block.times.filter(x => x !== t) : [...block.times.filter(x => x !== "all"), t] })} />
-            {t === "all" ? "Whole day" : slotLabel[t]}</label>)}
-        </div></fieldset>
-        <button className="button" disabled={busy || !block.date || !block.times.length}>{busy ? "Saving…" : "Block"}</button>
-      </form>
-      <h3 className="admin-subhead">Blocked</h3>
-      {blockDays.length === 0 ? <p className="empty-note">Nothing blocked.</p> : <ul className="admin-blocks">{blockDays.map(([date, times]) =>
-        <li key={date}><strong>{fmt(date)}</strong><div>{times.map(t => <span key={t} className="chip chip-static">{t === "all" ? "Whole day" : slotLabel[t] ?? t}
-          <button type="button" aria-label={`Unblock ${t === "all" ? "whole day" : slotLabel[t]} on ${fmt(date)}`} disabled={busy} onClick={() => act({ action: "unblock", date, time: t }, "Unblocked.")}>×</button></span>)}</div></li>)}</ul>}
-    </div>}
-
-    {tab === "quotes" && <div className="admin-panel" role="tabpanel" aria-label="Quotes">
-      <div className="admin-filter">{(["new", "all"] as const).map(f => <button key={f} type="button" aria-pressed={quoteFilter === f} onClick={() => setQuoteFilter(f)}>{f === "new" ? "Needs a reply" : "All"}</button>)}</div>
-      {data!.quotes.filter(q => quoteFilter === "all" || q.status === "new").length === 0 && <p className="empty-note">{quoteFilter === "new" ? "All caught up." : "No quote requests yet."}</p>}
-      {data!.quotes.filter(q => quoteFilter === "all" || q.status === "new").map(q => <article key={q.reference} className={`admin-job ${q.status}`}>
-        <div className="admin-job-head"><h4>{q.service}</h4><div className="admin-badges"><span className={`badge ${q.status === "replied" ? "" : "badge-new"}`}>{q.status === "replied" ? "Replied" : "New"}</span></div></div>
-        <p className="admin-job-customer"><strong>{q.name}</strong> · {q.vehicle}</p>
-        <div className="admin-contact"><a className="chip" href={`tel:${q.phone}`}>Call</a><a className="chip" href={`sms:${q.phone}`}>Text</a><a className="chip" href={`mailto:${q.email}?subject=${encodeURIComponent(`Your ${q.service.toLowerCase()} quote`)}`}>Email</a></div>
-        <dl className="admin-job-facts">
-          <div><dt>Timing</dt><dd>{q.timing || "Not given"}</dd></div>
-          {q.notes && <div><dt>Notes</dt><dd>{q.notes}</dd></div>}
-          <div><dt>Received</dt><dd>{new Date(q.receivedAt * 1000).toLocaleString("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</dd></div>
-          <div><dt>Reference</dt><dd>{q.reference}</dd></div>
+    <div className="admin-body">
+      <div className="admin-overview">
+        <p className="admin-date">{fmt(today)}</p>
+        <dl className="admin-stats">
+          <div><dt>Today</dt><dd>{todayJobs.length} {todayJobs.length === 1 ? "job" : "jobs"}</dd><small>${todayJobs.reduce((n, j) => n + collect(j), 0)} to collect</small></div>
+          <div><dt>Next 7 days</dt><dd>{thisWeek} {thisWeek === 1 ? "job" : "jobs"}</dd><small>{data!.upcoming.length} booked in total</small></div>
+          <div><dt>Quotes</dt><dd>{newQuotes.length} waiting</dd><small>{newQuotes.length ? "need a reply" : "all caught up"}</small></div>
         </dl>
-        <div className="hero-actions admin-actions"><button className="outline-button" type="button" disabled={busy} onClick={() => act({ action: "quote", reference: q.reference, status: q.status === "new" ? "replied" : "new" }, q.status === "new" ? "Marked as replied." : "Moved back to needs a reply.")}>
-          {q.status === "new" ? "Mark replied" : "Mark as needing a reply"}</button></div>
-      </article>)}
-    </div>}
+      </div>
+      {!status.enabled && <p className="admin-note">Online booking isn&apos;t live yet. Blocking time already works: blocked windows show as taken on the booking page.</p>}
+
+      <div className="admin-tabs" role="tablist" aria-label="Dashboard sections">
+        {([["jobs", "Jobs"], ["quotes", `Quotes${newQuotes.length ? ` (${newQuotes.length})` : ""}`], ["time", "Time off"]] as const).map(([id, label]) =>
+          <button key={id} role="tab" type="button" aria-selected={tab === id} className={tab === id ? "selected" : ""} onClick={() => { setTab(id); setMessage(""); setOpen(null); }}>{label}</button>)}
+      </div>
+      {message && <p className="admin-toast" role="status">{message}</p>}
+
+      <div className="admin-grid">
+        <div className="admin-panel panel-jobs" role="tabpanel" aria-label="Jobs">
+          {days.length === 0 && <p className="admin-empty">No upcoming jobs. New bookings show up here as soon as they&apos;re paid.</p>}
+          {days.map(([date, jobs]) => <section key={date} className="admin-day" aria-label={`${dayName(date)}, ${fmt(date)}`}>
+            <h2><span>{dayName(date)}</span> {fmt(date, { month: "long", day: "numeric" })}<small>{jobs.length} {jobs.length === 1 ? "job" : "jobs"} · ${jobs.reduce((n, j) => n + collect(j), 0)} to collect</small></h2>
+            {jobs.map(j => jobCard(j))}
+          </section>)}
+          {data!.recent.length > 0 && <details className="admin-recent"><summary>Last 30 days and cancelled ({data!.recent.length})</summary>{data!.recent.map(j => jobCard(j, true))}</details>}
+        </div>
+
+        <aside className="admin-side">
+          <section className="admin-panel panel-quotes" role="tabpanel" aria-label="Quotes">
+            <div className="side-head"><h2>Quote requests</h2>
+              <div className="admin-filter">{(["new", "all"] as const).map(f => <button key={f} type="button" aria-pressed={quoteFilter === f} onClick={() => setQuoteFilter(f)}>{f === "new" ? "Needs a reply" : "All"}</button>)}</div></div>
+            {shownQuotes.length === 0 ? <p className="admin-empty">{quoteFilter === "new" ? "All caught up." : "No quote requests yet."}</p> : shownQuotes.map(quoteCard)}
+          </section>
+
+          <section className="admin-panel panel-time" role="tabpanel" aria-label="Time off">
+            <div className="side-head"><h2>Time off</h2></div>
+            <form className="admin-block" onSubmit={e => { e.preventDefault(); if (block.date && block.times.length) act({ action: "block", date: block.date, times: block.times }, `Blocked ${fmt(block.date)}.`); }}>
+              <label>Date<input type="date" required min={today} value={block.date} onChange={e => setBlock({ ...block, date: e.target.value })} /></label>
+              <fieldset><legend>Block</legend><div className="admin-windows">
+                {(["all", ...bookingTimes] as string[]).map(t => <label key={t} className={block.times.includes(t) ? "selected" : ""}>
+                  <input type="checkbox" checked={block.times.includes(t)} onChange={() => setBlock({ ...block, times: t === "all" ? ["all"] : block.times.includes(t) ? block.times.filter(x => x !== t) : [...block.times.filter(x => x !== "all"), t] })} />
+                  {t === "all" ? "Whole day" : slotLabel[t]}</label>)}
+              </div></fieldset>
+              <button className="button" disabled={busy || !block.date || !block.times.length}>{busy ? "Saving…" : "Block"}</button>
+              <p className="admin-muted">Blocked windows show as taken on the booking page. Existing bookings aren&apos;t affected.</p>
+            </form>
+            {blockDays.length === 0 ? <p className="admin-empty">Nothing blocked.</p> : <ul className="admin-blocks">{blockDays.map(([date, times]) =>
+              <li key={date}><strong>{fmt(date, { weekday: "short", month: "short", day: "numeric" })}</strong><div>{times.map(t => <span key={t} className="chip chip-static">{t === "all" ? "Whole day" : slotLabel[t] ?? t}
+                <button type="button" aria-label={`Unblock ${t === "all" ? "whole day" : slotLabel[t]} on ${fmt(date)}`} disabled={busy} onClick={() => act({ action: "unblock", date, time: t }, "Unblocked.")}>×</button></span>)}</div></li>)}</ul>}
+          </section>
+        </aside>
+      </div>
+    </div>
   </section>;
+}
+
+// Small line icons (24px grid, drawn with the current text colour).
+const icons = {
+  phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
+  text: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z",
+  pin: "M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zm0-8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z",
+  mail: "M3 6h18v12H3zM3 7l9 6 9-6",
+  refresh: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7",
+};
+function Icon({ d }: { d: string }) {
+  return <svg className="icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
 }

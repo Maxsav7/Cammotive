@@ -234,13 +234,13 @@ test("Cam's dashboard: sign in with an emailed code, move a job, block a day, re
   await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 
   const job = page.locator(".admin-job", { hasText: code });
-  await expect(job).toContainText("$50 deposit paid");
+  await expect(job).toContainText("$50 paid");
   await expect(job.getByRole("link", { name: "Directions" })).toHaveAttribute("href", /google\.com\/maps/);
   // Move it to the same day's evening window.
   await job.getByRole("button", { name: "Move" }).click();
   await job.locator(".admin-windows label", { hasText: "4–8 PM" }).click();
   await job.getByRole("button", { name: "Move and email customer" }).click();
-  await expect(page.locator(".manage-message")).toContainText("Moved");
+  await expect(page.locator(".admin-toast")).toContainText("Moved");
   await expect(page.locator(".admin-job", { hasText: code })).toContainText("4–8 PM");
   await expect(page.locator(".admin-job", { hasText: code }).locator(".badge")).toHaveText("Moved");
   await emailsTo(request, email, /^Moved:/);
@@ -250,7 +250,9 @@ test("Cam's dashboard: sign in with an emailed code, move a job, block a day, re
   await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 
   // Block a whole day; the booking page shows it as full.
-  await page.getByRole("tab", { name: "Block time" }).click();
+  // Phones show one section at a time (tabs); wider screens show them side by side.
+  const openTab = async name => { const tab = page.getByRole("tab", { name }); if (await tab.isVisible()) await tab.click(); };
+  await openTab("Time off");
   const blockDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date(Date.now() + (testInfo.project.name === "phone" ? 41 : 40) * 86400000));
   await page.getByLabel("Date").fill(blockDay);
   await page.getByRole("button", { name: "Block", exact: true }).click();
@@ -259,11 +261,11 @@ test("Cam's dashboard: sign in with an emailed code, move a job, block a day, re
   expect(blocked.days[0].slots.map(s => s.state)).toEqual(["taken", "taken", "taken"]);
 
   // Quotes: mark the new request replied.
-  await page.getByRole("tab", { name: /Quotes/ }).click();
-  const quote = page.locator(".admin-job", { hasText: `2019 Audi S5 ${testInfo.project.name}` });
+  await openTab(/Quotes/);
+  const quote = page.locator(".admin-quote", { hasText: `2019 Audi S5 ${testInfo.project.name}` });
   await expect(quote).toContainText("Paint correction");
   await quote.getByRole("button", { name: "Mark replied" }).click();
-  await expect(page.locator(".admin-job", { hasText: `2019 Audi S5 ${testInfo.project.name}` })).toHaveCount(0); // "Needs a reply" filter
+  await expect(page.locator(".admin-quote", { hasText: `2019 Audi S5 ${testInfo.project.name}` })).toHaveCount(0); // "Needs a reply" filter
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Dashboard sign-in" })).toBeVisible();
