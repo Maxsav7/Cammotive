@@ -81,6 +81,15 @@ export const customerSessions = sqliteTable("customer_sessions", {
   expires: integer("expires").notNull(),
 });
 
+// Cam's dashboard password. Only a salted, slow hash is stored (PBKDF2-SHA256 over
+// a keyed pre-hash, so a copy of the database alone isn't enough to test guesses).
+// Set or reset by proving access to the owner's inbox with an emailed code.
+export const adminCredentials = sqliteTable("admin_credentials", {
+  emailHash: text("email_hash").primaryKey(),
+  passwordHash: text("password_hash").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 // Time Cam has blocked off from the dashboard: one window ("8:00 AM") or the whole
 // day ("all"). Blocked windows show as taken and can't be booked.
 export const blockedSlots = sqliteTable("blocked_slots", {

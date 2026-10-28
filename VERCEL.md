@@ -28,6 +28,7 @@ production.
    npx wrangler d1 execute <your-database-name> --remote --file=drizzle/0000_booking_schema.sql
    npx wrangler d1 execute <your-database-name> --remote --file=drizzle/0001_stripe_deposits.sql
    npx wrangler d1 execute <your-database-name> --remote --file=drizzle/0002_admin_dashboard.sql
+   npx wrangler d1 execute <your-database-name> --remote --file=drizzle/0003_admin_password.sql
    ```
 
    If the database already exists, run only the files it hasn't had yet (each is
@@ -125,10 +126,20 @@ production.
 
 ## Cam's dashboard (/admin)
 
-Cam opens `https://www.camotivedetailing.com/admin` (bookmark it on his phone),
-enters his email and types the 6-digit code it sends. Only `CAM_BOOKING_EMAIL`
-can sign in (add more owner addresses, comma-separated, in `ADMIN_EMAILS`). He
-stays signed in on that device for 7 days.
+Cam opens `https://www.camotivedetailing.com/admin` (bookmark it on his phone)
+and signs in with his email and password; his phone's password manager can save
+it. Only `CAM_BOOKING_EMAIL` can sign in (add more owner addresses,
+comma-separated, in `ADMIN_EMAILS`).
+
+- **First time, or forgot the password:** "Forgot your password, or signing in
+  for the first time?" emails a 6-digit code to the owner address; he enters it
+  and chooses a password (10+ characters). Every other device is signed out and
+  he gets a "password changed" email.
+- **Stays signed in** for 30 days, renewed whenever he uses it, so in practice
+  he only signs in again after a month away.
+- **Account** (top bar): change the password (needs the current one; signs out
+  other devices) and **Sign out of all devices** for a lost phone. **Sign out**
+  ends the session on the server, not just on that phone.
 
 - **Jobs:** upcoming bookings by day with the customer's name, phone, email,
   vehicle and address; one-tap Call, Text, Directions and Email; the estimate,

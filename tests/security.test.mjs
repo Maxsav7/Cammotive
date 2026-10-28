@@ -162,6 +162,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const adminCode = load(resolve(root, "app/api/admin/code/route.ts"));
     const adminSignin = load(resolve(root, "app/api/admin/session/route.ts"));
     const dashboard = load(resolve(root, "app/api/admin/dashboard/route.ts"));
+    const adminPassword = load(resolve(root, "app/api/admin/password/route.ts"));
     const maintenance = load(resolve(root, "app/api/internal/booking-maintenance/route.ts"));
     const outbox = load(resolve(root, "lib/booking-outbox.ts"));
     const security = load(resolve(root, "lib/booking-security.ts"));
@@ -183,7 +184,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     });
     const count = async table => Number((await database.prepare(`SELECT count(*) AS n FROM ${table}`).first()).n);
     const reset = async () => {
-      await database.batch(["booking_outbox", "booking_payments", "secure_bookings", "booking_limits", "appointments", "customer_codes", "customer_sessions", "blocked_slots", "quote_requests"].map(table => database.prepare(`DELETE FROM ${table}`)));
+      await database.batch(["booking_outbox", "booking_payments", "secure_bookings", "booking_limits", "appointments", "customer_codes", "customer_sessions", "blocked_slots", "quote_requests", "admin_credentials"].map(table => database.prepare(`DELETE FROM ${table}`)));
       emails = []; failEmail = false; wrongHost = false; dbFailure = false; failOutboxInsert = false;
       googleEvents.clear(); googleBusy = []; googleDown = false;
       stripeSessions.clear(); refunds = []; stripeDown = false;
@@ -583,7 +584,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         const sent = await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%'").all();
         assert.equal(sent.results.length, 1, "only the owner gets a code");
         const otp = (await security.unseal(sent.results[0].payload)).subject.slice(0, 6);
-        const signIn = (email, code) => post(adminSignin.POST, "/api/admin/session", { email, code });
+        const signIn = (email, code) => post(adminSignin.POST, "/api/admin/session", { email, code, newPassword: "correct horse battery" });
         assert.equal((await signIn("audit@example.com", otp)).status, 401);
         const wrong = otp === "000000" ? "111111" : "000000";
         for (let i = 0; i < 5; i++) assert.equal((await signIn("owner@example.com", wrong)).status, 401);
@@ -611,8 +612,53 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       const adminSession = async () => {
         await post(adminCode.POST, "/api/admin/code", { email: "owner@example.com", turnstileToken: "valid-recovery" });
         const otp = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%' ORDER BY rowid DESC").first()).payload)).subject.slice(0, 6);
-        return (await (await post(adminSignin.POST, "/api/admin/session", { email: "owner@example.com", code: otp })).json()).session;
+        return (await (await post(adminSignin.POST, "/api/admin/session", { email: "owner@example.com", code: otp, newPassword: "correct horse battery" })).json()).session;
       };
+      await t.test("dashboard password: set with an emailed code, sign in, change, sign out, sign out everywhere", async () => {
+        await reset();
+        const view = token => dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { authorization: `Bearer ${token}` } }));
+        const login = (email, password) => post(adminSignin.POST, "/api/admin/session", { email, password });
+        // No password yet: nothing can sign in.
+        assert.equal((await login("owner@example.com", "correct horse battery")).status, 401);
+        // Too short a password is refused even with a valid code.
+        await post(adminCode.POST, "/api/admin/code", { email: "owner@example.com", turnstileToken: "valid-recovery" });
+        const otp = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%' ORDER BY rowid DESC").first()).payload)).subject.slice(0, 6);
+        assert.equal((await post(adminSignin.POST, "/api/admin/session", { email: "owner@example.com", code: otp, newPassword: "short" })).status, 400);
+        const first = await adminSession(); // sets "correct horse battery" with a fresh code
+        const stored = String((await database.prepare("SELECT password_hash FROM admin_credentials").first()).password_hash);
+        assert.match(stored, /^pbkdf2-sha256\$100000\$/); assert.ok(!stored.includes("correct horse"), "only a hash is stored");
+        assert.ok(emails.some(e => /dashboard password was changed/.test(e.subject)) || await database.prepare("SELECT 1 FROM booking_outbox WHERE id LIKE 'admin-password-%'").first(), "owner is told");
+        // Everyday sign-in with the password; wrong password and strangers get the same answer.
+        const good = await login("Owner@Example.com", "correct horse battery"); assert.equal(good.status, 201);
+        const second = (await good.json()).session;
+        const bad = await login("owner@example.com", "wrong horse battery"), stranger = await login("audit@example.com", "correct horse battery");
+        assert.equal(bad.status, 401); assert.deepEqual(await bad.json(), await stranger.json());
+        assert.equal((await view(first)).status, 200); assert.equal((await view(second)).status, 200);
+        // Change password: needs the current one, keeps this session, ends the others.
+        const change = (token, currentPassword, newPassword) => post(adminPassword.POST, "/api/admin/password", { currentPassword, newPassword }, { authorization: `Bearer ${token}` });
+        assert.equal((await change(second, "not my password", "a brand new passphrase")).status, 401);
+        assert.equal((await change(second, "correct horse battery", "a brand new passphrase")).status, 200);
+        assert.equal((await view(second)).status, 200); assert.equal((await view(first)).status, 401, "other devices signed out");
+        assert.equal((await login("owner@example.com", "correct horse battery")).status, 401);
+        const third = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
+        // Sign out ends the session on the server, not just on the device.
+        const out = (token, everywhere = false) => adminSignin.DELETE(new Request(`https://booking.example.com/api/admin/session${everywhere ? "?everywhere=1" : ""}`, { method: "DELETE", headers: { origin: "https://booking.example.com", authorization: `Bearer ${token}` } }));
+        assert.equal((await adminSignin.DELETE(new Request("https://booking.example.com/api/admin/session", { method: "DELETE", headers: { origin: "https://evil.example", authorization: `Bearer ${third}` } }))).status, 403);
+        assert.equal((await out(third)).status, 200);
+        assert.equal((await view(third)).status, 401); assert.equal((await view(second)).status, 200);
+        const fourth = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
+        assert.equal((await out(fourth, true)).status, 200);
+        assert.equal((await view(fourth)).status, 401); assert.equal((await view(second)).status, 401, "sign out everywhere");
+        // Repeated sign-ins are rate limited per account (10 an hour), including correct ones.
+        assert.equal((await login("owner@example.com", "a brand new passphrase")).status, 429);
+        await database.prepare("DELETE FROM booking_limits").run();
+        // Active sessions renew: an old session is extended when used.
+        const fifth = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
+        await database.prepare("UPDATE customer_sessions SET expires = ?").bind(Math.floor(Date.now() / 1000) + 3600).run();
+        assert.equal((await view(fifth)).status, 200);
+        const renewed = Number((await database.prepare("SELECT max(expires) AS e FROM customer_sessions").first()).e);
+        assert.ok(renewed > Math.floor(Date.now() / 1000) + 29 * 86400, "renewed to 30 days");
+      });
       await t.test("dashboard: move a booking, cancel with refund, block time, and track quotes", async () => {
         await reset();
         const first = await book();

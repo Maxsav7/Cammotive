@@ -79,10 +79,19 @@ API returns 503 and the UI shows the call/text alternative.
   1-hour session token held only in the browser tab. The link in the
   confirmation email is a keyed hash of the booking code and signs in the same way.
 - Customers can only see and cancel bookings made with their own email.
-- Cam's dashboard (/admin) uses the same emailed-code sign-in, but only for
-  `CAM_BOOKING_EMAIL` / `ADMIN_EMAILS`, with codes and sessions keyed separately
-  from customers' (a customer session can never open it). Sessions last 7 days
-  and end immediately if the address is removed from the settings. Every
+- Cam's dashboard (/admin) signs in with email and password, only for
+  `CAM_BOOKING_EMAIL` / `ADMIN_EMAILS`. Passwords (10+ characters) are stored
+  only as PBKDF2-SHA256 (100,000 iterations, the Workers maximum, random salt)
+  over an HMAC pre-hash keyed with `BOOKING_HASH_SECRET`, so a database copy
+  alone can't be used to test guesses. Sign-in attempts are limited to 10 an hour
+  per account and 20 per IP, with the same answer for unknown addresses. The
+  password is set or reset only with a code emailed to the owner address (5
+  tries, 15 minutes, Turnstile on the request); setting or changing it signs out
+  every other device and emails the owner. Codes and sessions are keyed
+  separately from customers' (a customer session can never open it). Sessions
+  last 30 days, renew while in use, end on sign-out (server-side, or every
+  session with "Sign out of all devices") and end immediately if the address is
+  removed from the settings. Every
   dashboard request re-checks the session; actions are origin-checked and
   validated server-side. Treat the owner mailbox as an admin credential (2FA).
 

@@ -846,6 +846,17 @@ p { text-wrap: pretty; }
 .signin-card .logo { height: 34px; justify-self: start; }
 .signin-card h1 { font-size: 30px; }
 .admin-muted { color: var(--muted); font-size: 14px; }
+.password-label { display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--muted); }
+.password-field { display: flex; align-items: center; gap: 6px; }
+.password-field input { flex: 1; min-width: 0; }
+.signin-links { margin: 0; }
+.signin-links .text-button { font-size: 14px; }
+.admin-account { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: 1240px; margin: 0 auto; padding: 20px 20px 0; }
+.admin-account h2 { font-size: 17px; font-weight: 620; font-stretch: 106%; }
+.admin-account .admin-block label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.admin-account input:not([hidden]) { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--text); font: inherit; }
+.admin-account .admin-block { align-content: start; }
+.admin-account .outline-button { justify-self: start; }
 
 .admin-bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; height: 60px; padding: 0 max(20px, calc((100% - 1200px) / 2));
   border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
@@ -969,6 +980,7 @@ p { text-wrap: pretty; }
   .admin-side .side-head h2 { display: none; }
 }
 @media (max-width: 640px) {
+  .admin-account { grid-template-columns: 1fr; }
   .admin-body { padding-top: 20px; }
   .admin-overview { margin-bottom: 16px; }
   .admin-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; gap: 8px; }
@@ -985,4 +997,11 @@ p { text-wrap: pretty; }
   .admin-day h2 small { width: 100%; margin-left: 0; }
   .label-wide { display: none; }
   .admin-bar .icon-button { padding: 0 9px; }
+  .admin-bar { gap: 10px; }
+  .admin-bar .ghost-button { padding: 0 8px; }
+}
+@media (max-width: 440px) {
+  /* Room for the account buttons: the title stays, the logo steps aside. */
+  .admin-bar .brand { display: none; }
+  .admin-bar-title { padding-left: 0; border-left: 0; }
 }

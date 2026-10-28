@@ -1,9 +1,10 @@
 "use client";
-// Cam's dashboard (/admin). Sign in with a 6-digit code emailed to the owner's
-// address, then: upcoming jobs by day (call, text, directions, move, cancel with
-// refund), the last 30 days, blocking off time, and quote requests.
-// The session token is kept on this device for 7 days so Cam stays signed in on
-// his phone; signing out removes it.
+// Cam's dashboard (/admin). Sign in with email and password (the browser can save
+// it); a 6-digit code emailed to the owner's address sets or resets the password.
+// Then: upcoming jobs by day (call, text, directions, move, cancel with refund),
+// the last 30 days, blocking off time, and quote requests.
+// The session lasts 30 days and renews while in use, so Cam stays signed in on his
+// phone. Signing out ends it on the server; "Sign out of all devices" ends them all.
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
 import Logo from "./Logo";
@@ -19,6 +20,9 @@ type Status = { enabled: boolean; dashboard?: boolean; siteKey?: string | null }
 type Slot = (typeof bookingTimes)[number];
 
 const KEY = "camotive-admin";
+const EMAIL_KEY = "camotive-admin-email";
+const rememberEmail = (value: string) => { try { localStorage.setItem(EMAIL_KEY, value); } catch {} };
+const rememberedEmail = () => { try { return localStorage.getItem(EMAIL_KEY) ?? ""; } catch { return ""; } };
 const remember = (value: string | null) => { try { if (value) localStorage.setItem(KEY, value); else localStorage.removeItem(KEY); } catch {} };
 const remembered = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
 const shift = (iso: string, days: number) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
@@ -31,7 +35,12 @@ const service = (j: { packageName: string; addOns: string }) => `${j.packageName
 export default function AdminDashboard() {
   const [status, setStatus] = useState<Status | null>(null);
   const [session, setSession] = useState<string | null>(null);
-  const [stage, setStage] = useState<"email" | "code" | "dash">("email");
+  const [stage, setStage] = useState<"login" | "email" | "code" | "dash">("login");
+  const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [account, setAccount] = useState(false);
+  const [change, setChange] = useState({ current: "", next: "" });
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [botToken, setBotToken] = useState("");
@@ -46,7 +55,13 @@ export default function AdminDashboard() {
   const [block, setBlock] = useState<{ date: string; times: string[] }>({ date: "", times: ["all"] });
   const [quoteFilter, setQuoteFilter] = useState<"new" | "all">("new");
 
-  const signOut = useCallback((note = "") => { remember(null); setSession(null); setData(null); setStage("email"); setMessage(note); }, []);
+  const signOut = useCallback((note = "") => { remember(null); setSession(null); setData(null); setStage("login"); setPassword(""); setAccount(false); setMessage(note); }, []);
+  // Ends the session on the server too (or every session), then forgets it here.
+  const endSession = useCallback(async (everywhere = false) => {
+    const token = remembered();
+    if (token) await fetch(`/api/admin/session${everywhere ? "?everywhere=1" : ""}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    signOut(everywhere ? "Signed out of all devices." : "");
+  }, [signOut]);
 
   const call = useCallback(async (token: string, method: "GET" | "POST", body?: unknown) => {
     const response = await fetch("/api/admin/dashboard", { method, cache: "no-store",
@@ -65,7 +80,8 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetch("/api/appointments/status", { cache: "no-store" }).then(r => r.json()).then(setStatus).catch(() => setStatus({ enabled: false }));
     const saved = remembered();
-    if (saved) queueMicrotask(() => { setSession(saved); load(saved); });
+    const savedEmail = rememberedEmail();
+    queueMicrotask(() => { if (savedEmail) setEmail(savedEmail); if (saved) { setSession(saved); load(saved); } });
   }, [load]);
 
   // When moving a job, show which windows are free on the chosen day.
@@ -96,10 +112,39 @@ export default function AdminDashboard() {
     if (busy) return;
     setBusy(true); setMessage("");
     try {
-      const response = await fetch("/api/admin/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code }) });
+      const response = await fetch("/api/admin/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code, newPassword }) });
       const result = await response.json();
       if (!response.ok) { setMessage(result.error || "That code isn't right."); return; }
-      remember(result.session); setSession(result.session); await load(result.session);
+      rememberEmail(email); remember(result.session); setSession(result.session); setNewPassword(""); await load(result.session);
+      setMessage("Password saved. Next time, sign in with your email and password.");
+    } catch { setMessage("Connection interrupted. Try again."); }
+    finally { setBusy(false); }
+  }
+
+  async function login(event: FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/admin/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+      const result = await response.json();
+      if (!response.ok) { setMessage(result.error || "Couldn't sign in."); return; }
+      rememberEmail(email); remember(result.session); setSession(result.session); setPassword(""); await load(result.session);
+    } catch { setMessage("Connection interrupted. Try again."); }
+    finally { setBusy(false); }
+  }
+
+  async function changePassword(event: FormEvent) {
+    event.preventDefault();
+    if (!session || busy) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/admin/password", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session}` },
+        body: JSON.stringify({ currentPassword: change.current, newPassword: change.next }) });
+      const result = await response.json().catch(() => ({}));
+      if (response.status === 401 && !result.error?.startsWith("Your current")) { signOut(result.error); return; }
+      if (!response.ok) { setMessage(result.error || "Couldn't change the password."); return; }
+      setChange({ current: "", next: "" }); setAccount(false); setMessage("Password changed. Other devices have been signed out.");
     } catch { setMessage("Connection interrupted. Try again."); }
     finally { setBusy(false); }
   }
@@ -132,20 +177,39 @@ export default function AdminDashboard() {
   if (!status.dashboard) return <section className="admin-gate"><div className="signin-card"><Logo /><h1>Dashboard</h1>
     <p>The dashboard turns on once the booking database and email are connected (steps 1–5 in VERCEL.md).</p></div></section>;
 
+  // The Show button sits outside the <label>, so the field's name stays just "Password".
+  const passwordField = (value: string, set: (v: string) => void, label: string, autoComplete: string) => {
+    const id = `admin-${label.toLowerCase().replace(/\W+/g, "-")}`;
+    return <div className="password-label"><label htmlFor={id}>{label}</label><span className="password-field">
+      <input id={id} type={showPassword ? "text" : "password"} autoComplete={autoComplete} required minLength={autoComplete === "new-password" ? 10 : 1} maxLength={200}
+        value={value} onChange={e => set(e.target.value)} />
+      <button type="button" className="ghost-button" onClick={() => setShowPassword(v => !v)} aria-pressed={showPassword} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? "Hide" : "Show"}</button></span></div>;
+  };
+
   if (stage !== "dash") return <section className="admin-gate">
-    {stage === "email" ? <form className="signin-card" onSubmit={requestCode}>
+    {stage === "login" ? <form className="signin-card" onSubmit={login}>
       <Logo /><h1>Dashboard sign-in</h1>
-      <p>Enter the owner&apos;s email. We&apos;ll send a 6-digit code to sign in.</p>
-      <label>Email<input type="email" autoComplete="email" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
+      <label>Email<input type="email" name="username" autoComplete="username" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
+      {passwordField(password, setPassword, "Password", "current-password")}
+      <button className="button" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+      <p className="signin-links"><button type="button" className="text-button" onClick={() => { setStage("email"); setMessage(""); }}>Forgot your password, or signing in for the first time?</button></p>
+    </form> : stage === "email" ? <form className="signin-card" onSubmit={requestCode}>
+      <Logo /><h1>Set your password</h1>
+      <p>Enter the owner&apos;s email. We&apos;ll send a 6-digit code, then you choose a new password.</p>
+      <label>Email<input type="email" autoComplete="username" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
       <BookingChallenge key={challenge} siteKey={status.siteKey!} action="recovery" onToken={setBotToken} />
       <button className="button" disabled={busy || !botToken}>{busy ? "Sending…" : "Email me a code"}</button>
+      <p className="signin-links"><button type="button" className="text-button" onClick={() => { setStage("login"); setMessage(""); }}>Back to sign in</button></p>
     </form> : <form className="signin-card" onSubmit={verify}>
-      <Logo /><h1>Enter your code</h1>
-      <p>Sent to <strong>{email}</strong> if it&apos;s the owner&apos;s address. It expires in 15 minutes.</p>
+      <Logo /><h1>Choose your password</h1>
+      <p>Enter the code sent to <strong>{email}</strong> (if it&apos;s the owner&apos;s address; it expires in 15 minutes), then choose a password. Your phone can save it.</p>
+      <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
       <label>6-digit code<input inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} required value={code}
         onChange={e => setCode(e.target.value.replace(/\D/g, ""))} className="code-input" /></label>
-      <button className="button" disabled={busy || code.length !== 6}>{busy ? "Checking…" : "Sign in"}</button>
-      <button type="button" className="text-button" onClick={() => { setStage("email"); setMessage(""); }}>Send a new code</button>
+      {passwordField(newPassword, setNewPassword, "New password", "new-password")}
+      <p className="admin-muted">At least 10 characters. A short phrase is easy to remember and hard to guess.</p>
+      <button className="button" disabled={busy || code.length !== 6 || newPassword.length < 10}>{busy ? "Saving…" : "Save password and sign in"}</button>
+      <p className="signin-links"><button type="button" className="text-button" onClick={() => { setStage("email"); setMessage(""); }}>Send a new code</button></p>
     </form>}
     {message && <p className="admin-toast" role="status">{message}</p>}
   </section>;
@@ -225,9 +289,25 @@ export default function AdminDashboard() {
       <h1 className="admin-bar-title">Dashboard</h1>
       <div className="admin-bar-actions">
         <button type="button" className="icon-button" disabled={busy} onClick={() => session && load(session)} aria-label="Refresh"><Icon d={icons.refresh} /><span className="label-wide">Refresh</span></button>
-        <button type="button" className="ghost-button" onClick={() => signOut()}>Sign out</button>
+        <button type="button" className="ghost-button" aria-expanded={account} aria-controls="admin-account" onClick={() => { setAccount(v => !v); setMessage(""); }}>Account</button>
+        <button type="button" className="ghost-button" onClick={() => endSession()}>Sign out</button>
       </div>
     </header>
+    {account && <div className="admin-account" id="admin-account">
+      <form className="admin-block" onSubmit={changePassword}>
+        <h2>Change password</h2>
+        <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
+        {passwordField(change.current, v => setChange({ ...change, current: v }), "Current password", "current-password")}
+        {passwordField(change.next, v => setChange({ ...change, next: v }), "New password", "new-password")}
+        <button className="button" disabled={busy || !change.current || change.next.length < 10}>{busy ? "Saving…" : "Change password"}</button>
+        <p className="admin-muted">Changing it signs out every other device. Forgot it? Sign out and use &ldquo;Forgot your password&rdquo;.</p>
+      </form>
+      <div className="admin-block">
+        <h2>Devices</h2>
+        <p className="admin-muted">Lost a phone, or signed in somewhere you shouldn&apos;t stay signed in? This signs out everywhere, including here.</p>
+        <button type="button" className="outline-button" disabled={busy} onClick={() => endSession(true)}>Sign out of all devices</button>
+      </div>
+    </div>}
 
     <div className="admin-body">
       <div className="admin-overview">

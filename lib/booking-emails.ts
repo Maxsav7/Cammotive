@@ -177,10 +177,19 @@ Camotive Detailing`,
 export function adminCodeEmail(email: string, code: string): Email {
   const subject = `${code} is your Camotive dashboard code`;
   return { to: email, subject, text:
-    `Your code to sign in to the Camotive dashboard is ${code}. It expires in 15 minutes.\n\nIf you didn't try to sign in, ignore this email; nobody can get in without the code.`,
-  html: renderEmail({ subject, preheader: `Dashboard code ${code}, valid 15 minutes.`, heading: "Dashboard sign-in code",
-    paragraphs: ["Enter this code on the dashboard sign-in page. It expires in 15 minutes."], rows: [["Code", code]],
-    after: ["Didn't try to sign in? Ignore this email; nobody can get in without the code."] }) };
+    `Your code to set your Camotive dashboard password is ${code}. It expires in 15 minutes.\n\nIf you didn't ask for this, ignore this email; nobody can change your password without the code.`,
+  html: renderEmail({ subject, preheader: `Dashboard code ${code}, valid 15 minutes.`, heading: "Set your dashboard password",
+    paragraphs: ["Enter this code on the dashboard page, then choose your password. It expires in 15 minutes."], rows: [["Code", code]],
+    after: ["Didn't ask for this? Ignore this email; nobody can change your password without the code."] }) };
+}
+
+export function adminPasswordChangedEmail(email: string): Email {
+  const subject = "Your Camotive dashboard password was changed";
+  return { to: email, subject, text:
+    `Your Camotive dashboard password was just set or changed, and other devices were signed out.\n\nIf this wasn't you, reset your password from the dashboard sign-in page ("Forgot password") right away.`,
+  html: renderEmail({ subject, preheader: "Other devices were signed out.", heading: "Dashboard password changed",
+    paragraphs: ["Your Camotive dashboard password was just set or changed, and other devices were signed out."],
+    after: ["If this wasn't you, reset your password from the dashboard sign-in page (Forgot password) right away."] }) };
 }
 
 // Rare: a payment completed after its hold had already been released and the slot

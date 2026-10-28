@@ -223,13 +223,27 @@ test("Cam's dashboard: sign in with an emailed code, move a job, block a day, re
   await page.getByRole("button", { name: "Request a quote" }).click();
   await expect(page.getByRole("heading", { name: /reply within one business day/ })).toBeVisible();
 
+  // First time: set a password with an emailed code.
+  const password = `detail-${testInfo.project.name}-passphrase`;
   await page.goto("/admin");
   await expect(page.getByRole("heading", { name: "Dashboard sign-in" })).toBeVisible();
+  await page.getByRole("button", { name: /Forgot your password/ }).click();
   await page.getByLabel("Email").fill("cam@example.com");
   await page.getByRole("button", { name: "Email me a code" }).click();
   await expect(page.getByLabel("6-digit code")).toBeVisible();
   const [codeEmail] = (await emailsTo(request, "cam@example.com", /dashboard code/)).slice(-1);
   await page.getByLabel("6-digit code").fill(codeEmail.subject.slice(0, 6));
+  await page.getByLabel("New password").fill(password);
+  await page.getByRole("button", { name: "Save password and sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  // Sign out ends the session; signing back in uses the password, and the email is remembered.
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Dashboard sign-in" })).toBeVisible();
+  await expect(page.getByLabel("Email")).toHaveValue("cam@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("not the password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator(".admin-toast")).toContainText("don't match");
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 
@@ -267,6 +281,6 @@ test("Cam's dashboard: sign in with an emailed code, move a job, block a day, re
   await quote.getByRole("button", { name: "Mark replied" }).click();
   await expect(page.locator(".admin-quote", { hasText: `2019 Audi S5 ${testInfo.project.name}` })).toHaveCount(0); // "Needs a reply" filter
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Dashboard sign-in" })).toBeVisible();
 });
