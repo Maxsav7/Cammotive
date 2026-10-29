@@ -847,8 +847,10 @@ p { text-wrap: pretty; }
 .signin-card h1 { font-size: 30px; }
 .admin-muted { color: var(--muted); font-size: 14px; }
 .password-label { display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--muted); }
-.password-field { display: flex; align-items: center; gap: 6px; }
-.password-field input { flex: 1; min-width: 0; }
+/* Show/Hide sits inside the box, so the password field matches the email field's width. */
+.password-field { position: relative; display: block; }
+.password-field input { width: 100%; box-sizing: border-box; padding-right: 76px !important; }
+.password-field .ghost-button { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); min-height: 34px; padding: 0 12px; }
 .signin-links { margin: 0; }
 .signin-links .text-button { font-size: 14px; }
 .admin-account { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: 1240px; margin: 0 auto; padding: 20px 20px 0; }
