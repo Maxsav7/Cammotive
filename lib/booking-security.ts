@@ -20,6 +20,13 @@ export function configuredOrigin() {
   }
   catch { return null; }
 }
+// What Cam's dashboard needs: everything except the on/off switches and Stripe,
+// so he can block off time and see quotes before online payment is live.
+export function dashboardReady() {
+  return Boolean(configuredOrigin() && process.env.TURNSTILE_SECRET_KEY && process.env.TURNSTILE_SITE_KEY && process.env.RESEND_API_KEY &&
+    process.env.BOOKING_FROM_EMAIL && process.env.CAM_BOOKING_EMAIL && /^[a-f0-9]{64}$/i.test(process.env.BOOKING_ENCRYPTION_KEY ?? "") &&
+    (process.env.BOOKING_HASH_SECRET?.length ?? 0) >= 32);
+}
 export function securityReady() {
   return process.env.BOOKING_ENABLED === "true" && process.env.BOOKING_SCHEDULER_READY === "true" && Boolean(configuredOrigin() && process.env.TURNSTILE_SECRET_KEY &&
     process.env.TURNSTILE_SITE_KEY && process.env.RESEND_API_KEY && process.env.BOOKING_FROM_EMAIL && process.env.CAM_BOOKING_EMAIL &&

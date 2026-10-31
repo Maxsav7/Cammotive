@@ -1,8 +1,11 @@
 import { env, databaseReady, clientAddress } from "@/lib/booking-db";
-import { digest, HttpError, securityReady } from "./booking-security";
+import { dashboardReady, digest, HttpError, securityReady } from "./booking-security";
 export const db = env.DB;
 export function requireBooking() {
   if (!securityReady() || !databaseReady()) throw new HttpError(503, "Online booking is temporarily unavailable. Please call (210) 573-0671.");
+}
+export function requireDashboard() {
+  if (!dashboardReady() || !databaseReady()) throw new HttpError(503, "The dashboard isn't set up yet. See VERCEL.md.");
 }
 // Atomic shared fixed-window counters; keyed hashes avoid storing raw IP/email.
 export async function limit(scope: string, identity: string, maximum: number, seconds = 3600) {

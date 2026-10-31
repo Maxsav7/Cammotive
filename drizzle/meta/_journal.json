@@ -15,6 +15,20 @@
       "when": 1792913449459,
       "tag": "0001_stripe_deposits",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793038060225,
+      "tag": "0002_admin_dashboard",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793224847192,
+      "tag": "0003_admin_password",
+      "breakpoints": true
     }
   ]
 }

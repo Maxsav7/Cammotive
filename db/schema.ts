@@ -2,7 +2,7 @@
 // `npm run db:generate` and commit the new file in `drizzle/`. CI fails if the
 // schema and the committed migrations drift apart.
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // Legacy bookings from the original form. Kept read-only: their dates still
 // block new bookings, but they are never exposed through a lookup endpoint.
@@ -80,6 +80,33 @@ export const customerSessions = sqliteTable("customer_sessions", {
   emailHash: text("email_hash").notNull(),
   expires: integer("expires").notNull(),
 });
+
+// Cam's dashboard password. Only a salted, slow hash is stored (PBKDF2-SHA256 over
+// a keyed pre-hash, so a copy of the database alone isn't enough to test guesses).
+// Set or reset by proving access to the owner's inbox with an emailed code.
+export const adminCredentials = sqliteTable("admin_credentials", {
+  emailHash: text("email_hash").primaryKey(),
+  passwordHash: text("password_hash").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+// Time Cam has blocked off from the dashboard: one window ("8:00 AM") or the whole
+// day ("all"). Blocked windows show as taken and can't be booked.
+export const blockedSlots = sqliteTable("blocked_slots", {
+  date: text("date").notNull(),
+  time: text("time").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, table => [primaryKey({ columns: [table.date, table.time] })]);
+
+// Quote requests, kept (encrypted) so Cam can track them in the dashboard.
+// status: "new" or "replied". Deleted after delete_after.
+export const quoteRequests = sqliteTable("quote_requests", {
+  reference: text("reference").primaryKey(),
+  details: text("details").notNull(),
+  status: text("status").notNull().default("new"),
+  createdAt: integer("created_at").notNull(),
+  deleteAfter: integer("delete_after").notNull(),
+}, table => [index("quote_requests_created").on(table.createdAt)]);
 
 // Shared fixed-window rate-limit counters, keyed by HMAC so no raw IP/email is stored.
 export const bookingLimits = sqliteTable("booking_limits", {

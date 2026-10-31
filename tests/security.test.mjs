@@ -159,6 +159,10 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const signinCode = load(resolve(root, "app/api/account/code/route.ts"));
     const signin = load(resolve(root, "app/api/account/session/route.ts"));
     const account = load(resolve(root, "app/api/account/appointments/route.ts"));
+    const adminCode = load(resolve(root, "app/api/admin/code/route.ts"));
+    const adminSignin = load(resolve(root, "app/api/admin/session/route.ts"));
+    const dashboard = load(resolve(root, "app/api/admin/dashboard/route.ts"));
+    const adminPassword = load(resolve(root, "app/api/admin/password/route.ts"));
     const maintenance = load(resolve(root, "app/api/internal/booking-maintenance/route.ts"));
     const outbox = load(resolve(root, "lib/booking-outbox.ts"));
     const security = load(resolve(root, "lib/booking-security.ts"));
@@ -180,7 +184,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     });
     const count = async table => Number((await database.prepare(`SELECT count(*) AS n FROM ${table}`).first()).n);
     const reset = async () => {
-      await database.batch(["booking_outbox", "booking_payments", "secure_bookings", "booking_limits", "appointments", "customer_codes", "customer_sessions"].map(table => database.prepare(`DELETE FROM ${table}`)));
+      await database.batch(["booking_outbox", "booking_payments", "secure_bookings", "booking_limits", "appointments", "customer_codes", "customer_sessions", "blocked_slots", "quote_requests", "admin_credentials"].map(table => database.prepare(`DELETE FROM ${table}`)));
       emails = []; failEmail = false; wrongHost = false; dbFailure = false; failOutboxInsert = false;
       googleEvents.clear(); googleBusy = []; googleDown = false;
       stripeSessions.clear(); refunds = []; stripeDown = false;
@@ -571,6 +575,145 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         await run();
         assert.equal(await count("secure_bookings"), 1, "paid bookings are never deleted");
         assert.ok(emails.some(e => /^Booked/.test(e.subject)));
+      });
+      await t.test("dashboard: only the owner's email can sign in, and customer sessions can't open it", async () => {
+        await reset(); await book();
+        const ask = email => post(adminCode.POST, "/api/admin/code", { email, turnstileToken: "valid-recovery" });
+        const owner = await ask("Owner@Example.com"), stranger = await ask("audit@example.com");
+        assert.equal(owner.status, 202); assert.deepEqual(await owner.json(), await stranger.json(), "doesn't reveal the owner's address");
+        const sent = await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%'").all();
+        assert.equal(sent.results.length, 1, "only the owner gets a code");
+        const otp = (await security.unseal(sent.results[0].payload)).subject.slice(0, 6);
+        const signIn = (email, code) => post(adminSignin.POST, "/api/admin/session", { email, code, newPassword: "correct horse battery" });
+        assert.equal((await signIn("audit@example.com", otp)).status, 401);
+        const wrong = otp === "000000" ? "111111" : "000000";
+        for (let i = 0; i < 5; i++) assert.equal((await signIn("owner@example.com", wrong)).status, 401);
+        assert.equal((await signIn("owner@example.com", otp)).status, 401, "locked after 5 wrong tries");
+        await ask("owner@example.com");
+        const fresh = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%' ORDER BY rowid DESC").first()).payload)).subject.slice(0, 6);
+        const ok = await signIn("owner@example.com", fresh); assert.equal(ok.status, 201);
+        const session = (await ok.json()).session;
+        const view = token => dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: token ? { authorization: `Bearer ${token}` } : {} }));
+        assert.equal((await view()).status, 401);
+        const data = await (await view(session)).json();
+        assert.equal(data.upcoming.length, 1); assert.equal(data.upcoming[0].phone, "+12105550123"); assert.equal(data.upcoming[0].address, "100 Synthetic Street");
+        assert.equal(data.upcoming[0].deposit, 50); assert.equal(data.upcoming[0].paid, true);
+        // A customer signed in to My appointments (even with the owner's email) is not an admin.
+        await post(signinCode.POST, "/api/account/code", { email: "audit@example.com", turnstileToken: "valid-recovery" });
+        const customerOtp = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'signin-%'").first()).payload)).subject.slice(0, 6);
+        const customer = (await (await post(signin.POST, "/api/account/session", { email: "audit@example.com", code: customerOtp })).json()).session;
+        assert.equal((await view(customer)).status, 401);
+        // Removing the owner's address ends its sessions.
+        process.env.CAM_BOOKING_EMAIL = "someone-else@example.com";
+        assert.equal((await view(session)).status, 401);
+        process.env.CAM_BOOKING_EMAIL = "owner@example.com";
+        assert.equal((await view(session)).status, 200);
+      });
+      const adminSession = async () => {
+        await post(adminCode.POST, "/api/admin/code", { email: "owner@example.com", turnstileToken: "valid-recovery" });
+        const otp = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%' ORDER BY rowid DESC").first()).payload)).subject.slice(0, 6);
+        return (await (await post(adminSignin.POST, "/api/admin/session", { email: "owner@example.com", code: otp, newPassword: "correct horse battery" })).json()).session;
+      };
+      await t.test("dashboard password: set with an emailed code, sign in, change, sign out, sign out everywhere", async () => {
+        await reset();
+        const view = token => dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { authorization: `Bearer ${token}` } }));
+        const login = (email, password) => post(adminSignin.POST, "/api/admin/session", { email, password });
+        // No password yet: nothing can sign in.
+        assert.equal((await login("owner@example.com", "correct horse battery")).status, 401);
+        // Too short a password is refused even with a valid code.
+        await post(adminCode.POST, "/api/admin/code", { email: "owner@example.com", turnstileToken: "valid-recovery" });
+        const otp = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%' ORDER BY rowid DESC").first()).payload)).subject.slice(0, 6);
+        assert.equal((await post(adminSignin.POST, "/api/admin/session", { email: "owner@example.com", code: otp, newPassword: "short" })).status, 400);
+        const first = await adminSession(); // sets "correct horse battery" with a fresh code
+        const stored = String((await database.prepare("SELECT password_hash FROM admin_credentials").first()).password_hash);
+        assert.match(stored, /^pbkdf2-sha256\$100000\$/); assert.ok(!stored.includes("correct horse"), "only a hash is stored");
+        assert.ok(emails.some(e => /dashboard password was changed/.test(e.subject)) || await database.prepare("SELECT 1 FROM booking_outbox WHERE id LIKE 'admin-password-%'").first(), "owner is told");
+        // Everyday sign-in with the password; wrong password and strangers get the same answer.
+        const good = await login("Owner@Example.com", "correct horse battery"); assert.equal(good.status, 201);
+        const second = (await good.json()).session;
+        const bad = await login("owner@example.com", "wrong horse battery"), stranger = await login("audit@example.com", "correct horse battery");
+        assert.equal(bad.status, 401); assert.deepEqual(await bad.json(), await stranger.json());
+        assert.equal((await view(first)).status, 200); assert.equal((await view(second)).status, 200);
+        // Change password: needs the current one, keeps this session, ends the others.
+        const change = (token, currentPassword, newPassword) => post(adminPassword.POST, "/api/admin/password", { currentPassword, newPassword }, { authorization: `Bearer ${token}` });
+        assert.equal((await change(second, "not my password", "a brand new passphrase")).status, 401);
+        assert.equal((await change(second, "correct horse battery", "a brand new passphrase")).status, 200);
+        assert.equal((await view(second)).status, 200); assert.equal((await view(first)).status, 401, "other devices signed out");
+        assert.equal((await login("owner@example.com", "correct horse battery")).status, 401);
+        const third = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
+        // Sign out ends the session on the server, not just on the device.
+        const out = (token, everywhere = false) => adminSignin.DELETE(new Request(`https://booking.example.com/api/admin/session${everywhere ? "?everywhere=1" : ""}`, { method: "DELETE", headers: { origin: "https://booking.example.com", authorization: `Bearer ${token}` } }));
+        assert.equal((await adminSignin.DELETE(new Request("https://booking.example.com/api/admin/session", { method: "DELETE", headers: { origin: "https://evil.example", authorization: `Bearer ${third}` } }))).status, 403);
+        assert.equal((await out(third)).status, 200);
+        assert.equal((await view(third)).status, 401); assert.equal((await view(second)).status, 200);
+        const fourth = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
+        assert.equal((await out(fourth, true)).status, 200);
+        assert.equal((await view(fourth)).status, 401); assert.equal((await view(second)).status, 401, "sign out everywhere");
+        // Repeated sign-ins are rate limited per account (10 an hour), including correct ones.
+        assert.equal((await login("owner@example.com", "a brand new passphrase")).status, 429);
+        await database.prepare("DELETE FROM booking_limits").run();
+        // Active sessions renew: an old session is extended when used.
+        const fifth = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
+        await database.prepare("UPDATE customer_sessions SET expires = ?").bind(Math.floor(Date.now() / 1000) + 3600).run();
+        assert.equal((await view(fifth)).status, 200);
+        const renewed = Number((await database.prepare("SELECT max(expires) AS e FROM customer_sessions").first()).e);
+        assert.ok(renewed > Math.floor(Date.now() / 1000) + 29 * 86400, "renewed to 30 days");
+      });
+      await t.test("dashboard: move a booking, cancel with refund, block time, and track quotes", async () => {
+        await reset();
+        const first = await book();
+        const other = await book({ ...valid(), time: "12:00 PM", email: "other@example.com", phone: "2105550140" });
+        const session = await adminSession();
+        const act = body => post(dashboard.POST, "/api/admin/dashboard", body, { authorization: `Bearer ${session}` });
+        assert.equal((await post(dashboard.POST, "/api/admin/dashboard", { action: "cancel", code: first.confirmationCode })).status, 401);
+        assert.equal((await post(dashboard.POST, "/api/admin/dashboard", { action: "cancel", code: first.confirmationCode }, { authorization: `Bearer ${session}`, origin: "https://evil.example" })).status, 403);
+        // Move: not onto a booked window; then to an open one, emailing the customer an updated invite.
+        assert.equal((await act({ action: "reschedule", code: first.confirmationCode, date: valid().date, time: "12:00 PM" })).status, 409);
+        assert.equal((await act({ action: "reschedule", code: first.confirmationCode, date: chicagoDay(-1), time: "4:00 PM" })).status, 400, "not into the past");
+        assert.equal((await act({ action: "reschedule", code: first.confirmationCode, date: valid().date, time: "4:00 PM" })).status, 200);
+        assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "taken", "taken"]);
+        const moved = await sealed(`${first.confirmationCode}-moved-1`);
+        assert.match(moved.subject, /^Moved: now/); assert.match(moved.text, /Was: .*8–11 AM/); assert.match(moved.text, /Now: .*4–8 PM/);
+        const ics = Buffer.from(moved.attachments[0].content, "base64").toString();
+        assert.match(ics, /SEQUENCE:1/); assert.match(ics, new RegExp(`UID:${first.confirmationCode}@camotive`)); assert.match(ics, /DTSTART:\d{8}T2[12]0000Z/, "4:00 PM Chicago");
+        // Cancel with refund.
+        assert.equal((await act({ action: "cancel", code: other.confirmationCode })).status, 200);
+        assert.equal(refunds.length, 1);
+        assert.equal((await act({ action: "cancel", code: other.confirmationCode })).status, 409);
+        // Block a window and a whole day: shown as taken, and can't be booked.
+        const day = chicagoDay(15);
+        assert.equal((await act({ action: "block", date: day, times: ["8:00 AM"] })).status, 200);
+        assert.deepEqual((await slots(day, 1)).days[0].slots.map(s => s.state), ["taken", "open", "open"]);
+        assert.equal((await route.POST(request({ ...valid(), date: day, email: "blocked@example.com", phone: "2105550141" }))).status, 409);
+        assert.equal((await act({ action: "block", date: chicagoDay(16), times: ["all"] })).status, 200);
+        assert.deepEqual((await slots(chicagoDay(16), 1)).days[0].slots.map(s => s.state), ["taken", "taken", "taken"]);
+        const blockedWithBooking = await (await act({ action: "block", date: valid().date, times: ["all"] })).json();
+        assert.equal(blockedWithBooking.existingBookings, 1, "Cam is told a booking is already on that day");
+        assert.equal((await act({ action: "unblock", date: day, time: "8:00 AM" })).status, 200);
+        assert.deepEqual((await slots(day, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"]);
+        assert.equal((await act({ action: "block", date: day, times: ["9:00 PM"] })).status, 400);
+        // Quotes are kept for the dashboard and can be marked replied.
+        const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", email: "quote@example.com", phone: "2105550126", timing: "", notes: "White paint", turnstileToken: "valid-quote" };
+        const { reference } = await (await quote.POST(request(body))).json();
+        assert.ok(!JSON.stringify(await database.prepare("SELECT * FROM quote_requests").first()).includes("Mach-E"), "stored encrypted");
+        let data = await (await dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { authorization: `Bearer ${session}` } }))).json();
+        assert.equal(data.quotes[0].reference, reference); assert.equal(data.quotes[0].vehicle, "2023 Mustang Mach-E"); assert.equal(data.quotes[0].status, "new");
+        assert.equal((await act({ action: "quote", reference, status: "replied" })).status, 200);
+        data = await (await dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { authorization: `Bearer ${session}` } }))).json();
+        assert.equal(data.quotes[0].status, "replied");
+        assert.equal(data.upcoming[0].moved, true); assert.equal(data.recent[0].status, "cancelled");
+      });
+      await t.test("dashboard works before online payment is set up", async () => {
+        await reset();
+        const saved = { enabled: process.env.BOOKING_ENABLED, stripe: process.env.STRIPE_SECRET_KEY };
+        process.env.BOOKING_ENABLED = "false"; process.env.STRIPE_SECRET_KEY = "";
+        try {
+          const session = await adminSession();
+          assert.match(session, /^[a-f0-9]{64}$/);
+          assert.equal((await post(dashboard.POST, "/api/admin/dashboard", { action: "block", date: chicagoDay(5), times: ["all"] }, { authorization: `Bearer ${session}` })).status, 200);
+          assert.deepEqual((await slots(chicagoDay(5), 1)).days[0].slots.map(s => s.state), ["taken", "taken", "taken"], "the text-booking calendar honors blocks");
+          assert.equal((await route.POST(request(valid()))).status, 503, "online booking itself stays off");
+        } finally { process.env.BOOKING_ENABLED = saved.enabled; process.env.STRIPE_SECRET_KEY = saved.stripe; }
       });
       if (runtime === "vercel-rest") await t.test("REST database failure doesn't permit booking", async () => {
         await reset(); dbFailure = true; assert.equal((await route.POST(request(valid()))).status, 503);

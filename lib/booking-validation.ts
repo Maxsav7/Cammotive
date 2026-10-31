@@ -9,7 +9,7 @@ export function addDays(day: string, days: number) {
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
-const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => {
+export const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => {
   const timestamp = Date.parse(`${v}T12:00:00Z`);
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === v;
 });

@@ -11,6 +11,7 @@ import Logo from "./Logo";
 import BookingFlow from "./BookingFlow";
 import QuoteForm from "./QuoteForm";
 import ManageBooking from "./ManageBooking";
+import AdminDashboard from "./AdminDashboard";
 import NextOpening from "./NextOpening";
 import MyAppointments from "./MyAppointments";
 import { AfterYouBook, CoatingStory, CorrectionStory, DetailChooser, DetailingStories } from "./ServiceInfo";
@@ -140,6 +141,8 @@ export default function Site({ page = "home" }: { page?: string }) {
   </section>;
 
   const quoteCta = quotePages.includes(page);
+  // Cam's dashboard is a work tool, not a marketing page: no site header, footer or calls to action.
+  if (page === "admin") return <main className="site-shell inner-page admin-shell" data-theme={theme}><AdminDashboard /></main>;
   return (
     <main className={`site-shell ${isHome ? "home-page" : "inner-page"}`} data-theme={theme}>
       <a className="skip-link" href="#main-content">Skip to content</a>
@@ -175,7 +178,7 @@ export default function Site({ page = "home" }: { page?: string }) {
           <section className="section convenience"><div className="section-heading"><p className="eyebrow">We come to you</p><h2>Your schedule. Your location.</h2><p>Detailing that works around your day, anywhere in San Antonio.</p></div><div className="convenience-grid">{[["Home", "Get a detail without leaving your driveway."], ["Workplace", "We work on your car while you work."], ["Apartment", "Arrange access and property permission in advance."], ["Somewhere else", "Tell us where the car is and we'll confirm the spot works."]].map(([name, desc]) => <a href="/book" key={name}><div><h3>{name}</h3><p>{desc}</p></div></a>)}</div></section>
           {pricing}
           <AfterYouBook />
-        </> : page === "manage" ? null : <section className="inner-hero"><div className="inner-hero-copy"><nav className="breadcrumb" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li>{crumbs.map(([label, href]) => <li key={label}>{href ? <a href={href}>{label}</a> : <span aria-current="page">{label}</span>}</li>)}</ol></nav><h1>{title?.[0]}</h1><p>{title?.[1]}</p>
+        </> : page === "manage" || page === "admin" ? null : <section className="inner-hero"><div className="inner-hero-copy"><nav className="breadcrumb" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li>{crumbs.map(([label, href]) => <li key={label}>{href ? <a href={href}>{label}</a> : <span aria-current="page">{label}</span>}</li>)}</ol></nav><h1>{title?.[0]}</h1><p>{title?.[1]}</p>
           {!["book", "appointment", "quote"].includes(page) && <div className="hero-actions">{page === "reviews" ? <><a className="button" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Read our Google reviews (opens in a new tab)">Read our Google reviews</a><a className="outline-button" href="/book">Book a detail</a></>
             : <>{quoteCta ? <a className="button" href={`/quote?service=${page === "paint-correction" ? "correction" : "ceramic"}`}>Request a quote</a> : <a className="button" href="/book">Book a detail</a>}<a className="outline-button" href="tel:+12105730671">Call (210) 573-0671</a></>}</div>}</div>
           {heroImage[page] && <img src={heroImage[page][0]} alt={heroImage[page][1]} />}</section>}
@@ -192,9 +195,10 @@ export default function Site({ page = "home" }: { page?: string }) {
         {page === "book" && <section className="booking section" id="booking"><BookingFlow /></section>}
         {page === "quote" && <section className="section quote-section"><QuoteForm /></section>}
         {page === "manage" && <ManageBooking />}
+        {page === "admin" && <AdminDashboard />}
         {page === "appointment" && <MyAppointments />}
         {(isHome || ["mobile-detailing", "locations"].includes(page) || currentArea) && faq}
-        {page !== "manage" && <section className="final-cta">{/* The CLA also appears in the gallery and coating showcase; don't show it twice. */}{!["our-work", "ceramic-coating"].includes(page) && <img src="/work/mercedes-cla-rear.jpg" alt="" loading="lazy" decoding="async" />}
+        {page !== "manage" && page !== "admin" && <section className="final-cta">{/* The CLA also appears in the gallery and coating showcase; don't show it twice. */}{!["our-work", "ceramic-coating"].includes(page) && <img src="/work/mercedes-cla-rear.jpg" alt="" loading="lazy" decoding="async" />}
           {quoteCta && page !== "quote" ? <><h2>Ready for a quote?</h2><p>Tell us about your vehicle and what you&apos;d like. We reply within one business day.</p><div className="hero-actions"><a className="button" href={`/quote?service=${page === "paint-correction" ? "correction" : "ceramic"}`}>Request a quote</a><a className="outline-button" href="sms:+12105730671">Text us photos</a></div></>
             : <><h2>Ready for your next detail?</h2><p>Pick an open time online and it&apos;s booked instantly. Prefer to talk first? Call or text anytime.</p><div className="hero-actions"><a className="button" href="/book">Book a detail</a><a className="outline-button" href="tel:+12105730671">Call (210) 573-0671</a></div></>}
         </section>}
@@ -204,7 +208,7 @@ export default function Site({ page = "home" }: { page?: string }) {
         <div><h3>Services</h3>{navLinks.map(l => <a key={l.href} href={l.href}>{l.title}</a>)}<a href="/locations">Service area</a></div>
         <div><h3>Camotive</h3><a href="/our-work">Our Work</a><a href={googleProfileUrl} target="_blank" rel="noopener noreferrer">Reviews<span className="sr-only"> on Google (opens in a new tab)</span></a><a href="/contact">Contact</a><a href="/about">About Us</a><a className="footer-rating" href={googleProfileUrl} target="_blank" rel="noreferrer"><span>★★★★★</span><strong>5.0 on Google</strong></a></div></div>
         <div className="footer-bottom"><p>© {new Date().getFullYear()} Camotive Detailing</p><small>Photos and videos by Camotive Detailing</small></div></footer>
-      {page !== "book" && page !== "manage" && <a className="mobile-booking-cta" href={quoteCta ? "/quote" : "/book"}>{quoteCta ? "Request a quote" : "Book a detail"}</a>}
+      {!["book", "manage", "admin"].includes(page) && <a className="mobile-booking-cta" href={quoteCta ? "/quote" : "/book"}>{quoteCta ? "Request a quote" : "Book a detail"}</a>}
     </main>
   );
 }

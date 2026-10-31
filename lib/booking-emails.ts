@@ -10,6 +10,7 @@ type Slot = (typeof bookingTimes)[number];
 export type BookingDetails = {
   packageName: string; addOns: string; total: number; date: string; time: Slot;
   name: string; email: string; phone: string; vehicle: string; address: string;
+  sequence?: number; // times rescheduled, for calendar invites
 };
 
 const PHONE = "(210) 573-0671";
@@ -36,7 +37,7 @@ const detailRows = (d: BookingDetails, code: string): Row[] => [
 ];
 const invite = (code: string, d: BookingDetails, cancelled = false) => ({
   filename: cancelled ? "camotive-cancelled.ics" : "camotive-appointment.ics", contentType: "text/calendar",
-  content: toBase64(appointmentIcs({ code, date: d.date, time: d.time, service: d.packageName, address: d.address, cancelled })),
+  content: toBase64(appointmentIcs({ code, date: d.date, time: d.time, service: d.packageName, address: d.address, cancelled, sequence: d.sequence ?? 0 })),
 });
 
 // ---------------------------------------------------------------------------
@@ -148,6 +149,49 @@ Camotive Detailing`,
     attachments: [invite(code, d, true)] };
 }
 
+// Cam moved the appointment from the dashboard. The invite keeps the same UID with
+// a higher SEQUENCE, so calendar apps move the event instead of adding another.
+export function rescheduledEmail(code: string, d: BookingDetails, from: { date: string; time: string }): Email {
+  const subject = `Moved: now ${longDate(d.date)} at ${d.time}`;
+  const was = `${longDate(from.date)}, ${slotLabel[from.time] ?? from.time}`;
+  const now = `${longDate(d.date)}, ${slotLabel[d.time] ?? d.time}`;
+  return { to: d.email, subject, text:
+`Hi ${firstName(d.name)},
+
+We've moved your appointment (${code}).
+
+Was: ${was}
+Now: ${now} (we arrive at ${d.time})
+
+Your $${depositDollars} deposit carries over. The attached invite updates your calendar.
+If the new time doesn't work, call or text ${PHONE} and we'll find another.
+
+Camotive Detailing`,
+    html: renderEmail({ subject, preheader: `Your appointment is now ${now}.`, status: { label: "Rescheduled", tone: "confirmed" },
+      heading: "Your appointment has moved", paragraphs: [`Hi ${firstName(d.name)}, we've moved your appointment. Your $${depositDollars} deposit carries over, and the attached invite updates your calendar.`],
+      rows: [["Was", was], ["Now", `${now}\nWe arrive at ${d.time}`], ...detailRows(d, code).slice(1)],
+      after: ["If the new time doesn't work, call or text us and we'll find another."] }),
+    attachments: [invite(code, d)] };
+}
+
+export function adminCodeEmail(email: string, code: string): Email {
+  const subject = `${code} is your Camotive dashboard code`;
+  return { to: email, subject, text:
+    `Your code to set your Camotive dashboard password is ${code}. It expires in 15 minutes.\n\nIf you didn't ask for this, ignore this email; nobody can change your password without the code.`,
+  html: renderEmail({ subject, preheader: `Dashboard code ${code}, valid 15 minutes.`, heading: "Set your dashboard password",
+    paragraphs: ["Enter this code on the dashboard page, then choose your password. It expires in 15 minutes."], rows: [["Code", code]],
+    after: ["Didn't ask for this? Ignore this email; nobody can change your password without the code."] }) };
+}
+
+export function adminPasswordChangedEmail(email: string): Email {
+  const subject = "Your Camotive dashboard password was changed";
+  return { to: email, subject, text:
+    `Your Camotive dashboard password was just set or changed, and other devices were signed out.\n\nIf this wasn't you, reset your password from the dashboard sign-in page ("Forgot password") right away.`,
+  html: renderEmail({ subject, preheader: "Other devices were signed out.", heading: "Dashboard password changed",
+    paragraphs: ["Your Camotive dashboard password was just set or changed, and other devices were signed out."],
+    after: ["If this wasn't you, reset your password from the dashboard sign-in page (Forgot password) right away."] }) };
+}
+
 // Rare: a payment completed after its hold had already been released and the slot
 // rebooked. The deposit is refunded automatically and the customer is told.
 export function slotLostEmail(code: string, d: BookingDetails): Email {
@@ -198,13 +242,15 @@ ${d.email}
 
 The attached invite adds it to your calendar (it's added automatically if Google Calendar sync is set up).
 View or cancel: ${link}
-(Keep this link private. It opens this booking only.)`,
+(Keep this link private. It opens this booking only.)
+All bookings: ${configuredOrigin()}/admin`,
     html: renderEmail({ subject, preheader: `${d.name}, ${d.vehicle}. ${longDate(d.date)} at ${d.time}.`,
       status: { label: "Confirmed", tone: "confirmed" }, heading: `New booking: ${d.packageName}`,
       paragraphs: [`The $${depositDollars} deposit is paid through Stripe, so it's confirmed and the customer has their confirmation email. If you cancel it, the deposit is refunded automatically.`],
       rows: [...detailRows(d, code).slice(0, 5), ["Customer", `${d.name}\n${prettyPhone(d.phone)}\n${d.email}`], ["Reference", code]],
       button: { label: "View or cancel", href: link },
-      after: ["Keep this link private. It opens this booking only. The attached invite adds it to your calendar if Google Calendar sync isn't set up."] }),
+      after: ["Keep this link private. It opens this booking only. The attached invite adds it to your calendar if Google Calendar sync isn't set up.",
+        `See all your bookings, move or cancel them, and block off time in your dashboard: ${configuredOrigin()}/admin`] }),
     attachments: [invite(code, d)] };
 }
 

@@ -29,14 +29,16 @@ const escape = (v: string) => v.replace(/\\/g, "\\\\").replace(/[;,]/g, m => `\\
 
 // A cancelled invite reuses the UID with a higher SEQUENCE, so calendar apps that
 // imported the original can match it and mark that event cancelled.
-export function appointmentIcs({ code, date, time, service, address, cancelled = false }: { code: string; date: string; time: Slot; service: string; address: string; cancelled?: boolean }) {
+// `sequence` goes up each time the booking is rescheduled, so calendar apps replace
+// the earlier version instead of adding a second event.
+export function appointmentIcs({ code, date, time, service, address, cancelled = false, sequence = 0 }: { code: string; date: string; time: Slot; service: string; address: string; cancelled?: boolean; sequence?: number }) {
   const start = slotToUtc(date, time);
   const end = slotEndUtc(date, time);
   const lines = [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Camotive Detailing//Booking//EN", "CALSCALE:GREGORIAN", cancelled ? "METHOD:CANCEL" : "METHOD:PUBLISH",
     "BEGIN:VEVENT",
     `UID:${code}@camotive`,
-    `SEQUENCE:${cancelled ? 1 : 0}`,
+    `SEQUENCE:${cancelled ? sequence + 1 : sequence}`,
     `STATUS:${cancelled ? "CANCELLED" : "CONFIRMED"}`,
     `DTSTAMP:${stamp(new Date())}`,
     `DTSTART:${stamp(start)}`,
