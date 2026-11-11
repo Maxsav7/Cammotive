@@ -21,7 +21,11 @@
     "test:browser": "npm run build:vercel && playwright test",
     "test:e2e": "npm run build:vercel && playwright test -c playwright.e2e.config.mjs",
     "security:audit": "node scripts/audit.mjs",
-    "test:dev": "node scripts/dev-smoke.mjs"
+    "test:dev": "node scripts/dev-smoke.mjs",
+    "build:cloudflare:staging": "CLOUDFLARE_ENV=staging npm run build",
+    "deploy:cloudflare:staging": "npm run build:cloudflare:staging && wrangler deploy",
+    "deploy:cloudflare:production": "npm run build && wrangler deploy",
+    "test:cloudflare": "npm run build && CF_SUITE=e2e playwright test -c playwright.cloudflare.config.mjs && CF_SUITE=browser playwright test -c playwright.cloudflare.config.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.3",

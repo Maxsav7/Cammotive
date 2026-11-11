@@ -1,5 +1,7 @@
 # Vercel deployment and booking setup
 
+Moving to Cloudflare Workers? See [CLOUDFLARE.md](./CLOUDFLARE.md).
+
 Production: https://www.camotivedetailing.com (also https://camotive.vercel.app; GitHub `Maxsav7/Cammotive`, branch `main`).
 `vercel.json` selects the native Next.js build (`npm run build:vercel`) and a daily
 cron for booking maintenance. Use Node 22.

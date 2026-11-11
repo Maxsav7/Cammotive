@@ -3,7 +3,10 @@
 // and any value on Vercel, is ignored, so production always uses the real services.
 function testOrigin() {
   const value = process.env.TEST_PROVIDER_ORIGIN;
-  return value && process.env.VERCEL !== "1" && /^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(value) ? value : null;
+  // Also ignored unless the site itself runs on loopback, so a stray value on a
+  // real deployment (Vercel or Cloudflare) can never redirect provider calls.
+  const loopbackSite = /^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(process.env.BOOKING_ORIGIN ?? "");
+  return value && loopbackSite && process.env.VERCEL !== "1" && /^http:\/\/127\.0\.0\.1:\d{2,5}$/.test(value) ? value : null;
 }
 export const testMode = () => testOrigin() !== null;
 export const d1Api = () => `${testOrigin() ?? "https://api.cloudflare.com"}/client/v4`;

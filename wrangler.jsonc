@@ -1,0 +1,64 @@
+// Cloudflare Workers configuration for camotivedetailing.com (built with vinext).
+// See CLOUDFLARE.md for setup, staging, cutover and rollback.
+//
+// - Production is the top level. Staging is `env.staging` (build with
+//   CLOUDFLARE_ENV=staging) and only gets a *.workers.dev URL.
+// - No `routes` / custom domain here on purpose: the production domain is
+//   attached in the dashboard at cutover, so a deploy can never take over
+//   camotivedetailing.com by accident.
+// - Secrets (API keys, encryption key, Cam's email...) are set with
+//   `wrangler secret put`, never in this file: this repository is public.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "camotive",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  // nodejs_compat also populates process.env from vars and secrets, which the
+  // booking code reads.
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  // Dashboard-set variables survive deploys.
+  "keep_vars": true,
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "camotive-bookings",
+      // Replace with the production D1 database id (wrangler d1 list).
+      "database_id": "00000000-0000-4000-8000-000000000001",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  // Emails and calendar changes are retried, reminders queued and expired data
+  // purged every 15 minutes (Vercel Hobby only allowed once a day).
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "vars": {
+    "BOOKING_ORIGIN": "https://www.camotivedetailing.com",
+    "BOOKING_FROM_EMAIL": "Camotive Detailing <bookings@camotivedetailing.com>"
+  },
+  "env": {
+    "staging": {
+      "name": "camotive-staging",
+      "workers_dev": true,
+      "preview_urls": false,
+      "keep_vars": true,
+      "observability": { "enabled": true },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "camotive-bookings-staging",
+          // Replace with the staging D1 database id.
+          "database_id": "94122a70-78e5-49be-afc8-c377a0c5cd84",
+          "migrations_dir": "drizzle"
+        }
+      ],
+      "triggers": { "crons": ["*/15 * * * *"] },
+      // BOOKING_ORIGIN for staging is its workers.dev URL, set as a secret
+      // because the account's workers.dev subdomain isn't known in advance.
+      "vars": {
+        "BOOKING_FROM_EMAIL": "Camotive Staging <bookings@camotivedetailing.com>"
+      }
+    }
+  }
+}
