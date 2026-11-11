@@ -568,7 +568,8 @@ p { text-wrap: pretty; }
 /* ---------- Meet the owner ---------- */
 .owner { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: clamp(40px, 6vw, 96px); align-items: start; }
 /* The chrome edge comes from the logo: a 1px gradient ring around the portrait. */
-.owner-photo { margin: 0; padding: 1px; border-radius: 26px; background: var(--chrome); box-shadow: 0 40px 80px -40px #000; }
+/* Top of the photo lines up with the "Driven by detail." heading, not the small label above it. */
+.owner-photo { margin: 46px 0 0; padding: 1px; border-radius: 26px; background: var(--chrome); box-shadow: 0 40px 80px -40px #000; }
 .site-shell[data-theme="light"] .owner-photo { box-shadow: 0 30px 60px -36px #1211174d; }
 .owner-photo img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 25px; }
 .owner-copy { max-width: 34em; }
@@ -590,7 +591,7 @@ p { text-wrap: pretty; }
 }
 @media (max-width: 800px) {
   .owner { grid-template-columns: 1fr; gap: 36px; }
-  .owner-photo { max-width: 460px; order: -1; }
+  .owner-photo { max-width: 460px; order: -1; margin-top: 0; }
   .service-story { grid-template-columns: 1fr; }
   .service-story.reverse .service-story-media { order: 0; }
   .service-story-media img { aspect-ratio: 4 / 3; }
