@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       const d = await unseal(String(r.details)) as BookingDetails;
       return { code: String(r.code), date: String(r.date), time: String(r.time), status: String(r.status),
         name: d.name, phone: d.phone, email: d.email, vehicle: d.vehicle, address: d.address, packageName: d.packageName, addOns: d.addOns,
-        total: d.total, deposit: Number(r.deposit_cents ?? 0) / 100, paid: Boolean(r.paid_at), refunded: Boolean(r.refunded_at),
+        total: d.total, discount: d.discount ?? 0, deposit: Number(r.deposit_cents ?? 0) / 100, paid: Boolean(r.paid_at), refunded: Boolean(r.refunded_at),
         cancelledBy: r.cancelled_by ?? null, bookedAt: Number(r.created_at), moved: (d.sequence ?? 0) > 0 };
     }));
     return json({

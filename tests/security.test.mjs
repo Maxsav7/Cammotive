@@ -184,7 +184,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     });
     const count = async table => Number((await database.prepare(`SELECT count(*) AS n FROM ${table}`).first()).n);
     const reset = async () => {
-      await database.batch(["booking_outbox", "booking_payments", "secure_bookings", "booking_limits", "appointments", "customer_codes", "customer_sessions", "blocked_slots", "quote_requests", "admin_credentials"].map(table => database.prepare(`DELETE FROM ${table}`)));
+      await database.batch(["booking_outbox", "booking_payments", "secure_bookings", "booking_limits", "appointments", "customer_codes", "customer_sessions", "blocked_slots", "quote_requests", "admin_credentials", "first_visit_claims"].map(table => database.prepare(`DELETE FROM ${table}`)));
       emails = []; failEmail = false; wrongHost = false; dbFailure = false; failOutboxInsert = false;
       googleEvents.clear(); googleBusy = []; googleDown = false;
       stripeSessions.clear(); refunds = []; stripeDown = false;
@@ -253,7 +253,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       await t.test("booking holds the slot and creates a $50 Stripe Checkout; nothing is sent until it's paid", async () => {
         await reset(); const response = await route.POST(request(valid())); assert.equal(response.status, 201);
         const result = await response.json();
-        assert.equal(result.total, 325); assert.equal(result.deposit, 50); assert.equal(result.status, "pending");
+        assert.equal(result.total, 300, "$325 less the $25 first-visit discount"); assert.equal(result.discount, 25); assert.equal(result.deposit, 50); assert.equal(result.status, "pending");
         assert.match(result.confirmationCode, /^CAM-[A-F0-9]{12}$/); assert.match(result.checkoutUrl, /^https:\/\/checkout\.stripe\.com\//);
         const session = sessionFor(result.confirmationCode);
         assert.equal(session.amount_total, 5000, "deposit is fixed server-side");
@@ -276,6 +276,63 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.match(Buffer.from(email.attachments[0].content, "base64").toString(), /STATUS:CONFIRMED/);
         const raw = email.text.match(/#access=([a-f0-9]{64})/)[1];
         assert.ok(!JSON.stringify(await database.prepare("SELECT * FROM secure_bookings").first()).includes(raw), "link token stored only as a hash");
+      });
+      await t.test("first visit: $25 off only the first booking per email and phone, past customers excluded, given back if Camotive cancels", async () => {
+        await reset();
+        const fresh = () => database.prepare("DELETE FROM booking_limits").run();
+        const at = (time, more) => ({ ...valid(), time, ...more });
+        const first = await book();
+        assert.equal(first.discount, 25); assert.equal(first.total, 300);
+        assert.equal(sessionFor(first.confirmationCode).amount_total, 5000, "the deposit itself isn't discounted");
+        assert.match(sessionFor(first.confirmationCode).form["line_items[0][price_data][product_data][description]"], /\$300 after your \$25 first-visit discount/);
+        const confirmation = await sealed("%-booked");
+        assert.match(confirmation.text, /\$300 estimate after your \$25 first-visit discount\. \$50 deposit paid, about \$250 due/);
+        assert.match((await sealed("%-cam")).text, /after your \$25 first-visit discount/);
+        assert.equal(await count("first_visit_claims"), 2, "email and phone both recorded, as keyed hashes");
+        assert.ok(!JSON.stringify(await database.prepare("SELECT * FROM first_visit_claims").all()).includes("audit@example.com"));
+        const sameEmail = await (await route.POST(request(at("12:00 PM", { phone: "2105550177" })))).json();
+        assert.equal(sameEmail.discount, 0); assert.equal(sameEmail.total, 325, "same email, new phone: full price");
+        await fresh();
+        const samePhone = await (await route.POST(request(at("4:00 PM", { email: "Another@Example.com" })))).json();
+        assert.equal(samePhone.discount, 0, "same phone, new email: full price");
+        await fresh();
+        const replayed = await (await route.POST(request({ ...valid(), date: future(8) }))).json();
+        assert.equal(replayed.discount, 0, "a second booking by the first customer");
+        // A retry of the first booking's own request still reports its discount.
+        await reset();
+        const key = crypto.randomUUID();
+        const paid = await book(valid(), key);
+        const retried = await (await route.POST(request(valid(), key))).json();
+        assert.equal(retried.status, "confirmed"); assert.equal(retried.discount, 25); assert.equal(retried.total, paid.total);
+        // Two first bookings at once: only the first being paid for gets it.
+        await reset();
+        const a = await (await route.POST(request(valid()))).json();
+        const b = await (await route.POST(request(at("12:00 PM")))).json();
+        assert.equal(a.discount, 25); assert.equal(b.discount, 0);
+        // An abandoned checkout doesn't use it up.
+        await reset();
+        const abandoned = await (await route.POST(request(valid()))).json();
+        await webhook.POST(await signed({ type: "checkout.session.expired", data: { object: { ...sessionFor(abandoned.confirmationCode), status: "expired" } } }));
+        assert.equal((await (await route.POST(request(at("12:00 PM")))).json()).discount, 25);
+        // Customers from the original booking form are past customers.
+        await reset();
+        await database.prepare(`INSERT INTO appointments (confirmation_code, package_id, package_name, date, time, total, name, email, phone, vehicle, address, reminder)
+          VALUES ('OLD-1', 'full', 'Full Detail', '2025-01-01', '8:00 AM', 250, 'Old', 'Old@Example.com ', '(210) 555-0199', 'Car', 'Somewhere 1', 'none')`).run();
+        assert.equal((await (await route.POST(request(at("8:00 AM", { email: "old@example.com", phone: "2105550150" })))).json()).discount, 0, "legacy email");
+        assert.equal((await (await route.POST(request(at("12:00 PM", { email: "new@example.com", phone: "2105550199" })))).json()).discount, 0, "legacy phone, any format");
+        // If Camotive cancels and refunds, the discount wasn't used: they get it on rebooking.
+        await reset();
+        await book();
+        const { code, token } = await adminLink();
+        assert.equal((await decide(code, "cancel", token)).status, 200);
+        assert.equal(await count("first_visit_claims"), 0);
+        assert.equal((await (await route.POST(request(valid()))).json()).discount, 25);
+        // A customer who cancels keeps having used it.
+        await reset();
+        const kept = await book();
+        await database.prepare("UPDATE secure_bookings SET status = 'cancelled' WHERE code = ?").bind(kept.confirmationCode).run();
+        await database.prepare("UPDATE booking_payments SET cancelled_by = 'customer' WHERE code = ?").bind(kept.confirmationCode).run();
+        assert.equal((await (await route.POST(request(valid()))).json()).discount, 0);
       });
       await t.test("webhooks need a valid, recent Stripe signature, and duplicates are harmless", async () => {
         await reset(); const { confirmationCode: code } = await (await route.POST(request(valid()))).json();

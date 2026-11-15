@@ -154,6 +154,21 @@ p { text-wrap: pretty; }
   linear-gradient(90deg, #121117e6 0%, #12111799 40%, #12111700 75%),
   linear-gradient(0deg, #121117 0%, #121117cc 18%, #12111700 55%); }
 .hero-copy { width: 100%; padding: 160px var(--gutter) 88px; }
+/* First-visit offer: a small chrome-edged pill above the hero location line. */
+.offer-strip { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 20px; padding: 7px 8px 7px 7px; border-radius: 999px; border: 1px solid #ffffff33; background: #12111799; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: #fff; font-size: 14px; text-decoration: none; transition: border-color .2s, background .2s; }
+.offer-strip b { padding: 4px 10px; border-radius: 999px; background: linear-gradient(180deg, #ffffff, #c9c8d1); color: #121117; font-weight: 700; letter-spacing: .01em; }
+.offer-strip span { color: #ffffffd9; }
+.offer-strip i { font-style: normal; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #ffffffb3; transition: transform .2s, color .2s; }
+.offer-strip:hover { border-color: #ffffff66; background: #121117cc; }
+.offer-strip:hover i { transform: translateX(2px); color: #fff; }
+.offer-strip:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.pricing-notice strong { color: var(--text); font-weight: 600; }
+.pricing-notice > a { flex: none; white-space: nowrap; }
+/* Booking flow: the first-visit offer, quiet and on-brand. */
+.first-visit-note { margin: 0 0 18px; padding: 14px 18px; border-radius: 14px; border: 1px dashed var(--line-strong); font-size: 15px; line-height: 1.55; color: var(--muted); }
+.first-visit-note strong { color: var(--text); font-weight: 600; }
+.done-discount { display: block; margin-top: 4px; font-size: 13px; font-weight: 500; color: #7bd88f; }
+.site-shell[data-theme="light"] .done-discount { color: #1d7a3c; }
 .hero-location { display: block; font-size: 15px; font-weight: 500; color: #ffffffb3; margin-bottom: 22px; }
 .hero-location > span { display: none; }
 .hero h1 { max-width: 12.5em; margin-bottom: 26px; font-weight: 640; }

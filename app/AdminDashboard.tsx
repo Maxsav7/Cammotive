@@ -12,7 +12,7 @@ import { bookingTimes, slotLabel } from "../lib/booking-catalog";
 
 type Job = {
   code: string; date: string; time: string; status: string; name: string; phone: string; email: string; vehicle: string; address: string;
-  packageName: string; addOns: string; total: number; deposit: number; paid: boolean; refunded: boolean; cancelledBy: string | null; moved: boolean;
+  packageName: string; addOns: string; total: number; discount: number; deposit: number; paid: boolean; refunded: boolean; cancelledBy: string | null; moved: boolean;
 };
 type Quote = { reference: string; status: "new" | "replied"; receivedAt: number; service: string; vehicle: string; name: string; email: string; phone: string; timing: string; notes: string };
 type Data = { today: string; upcoming: Job[]; recent: Job[]; blocks: { date: string; time: string }[]; quotes: Quote[] };
@@ -235,7 +235,7 @@ export default function AdminDashboard() {
     </div>
     <div className="job-money">
       {j.status === "cancelled" ? <span className="admin-muted">{j.refunded ? `$${j.deposit} refunded` : j.paid ? `$${j.deposit} deposit kept` : "No deposit"}</span>
-        : <><strong>${collect(j)}</strong><span>{past ? "collected on the day" : "to collect"}</span><small>${j.total} total · {j.paid ? `$${j.deposit} paid` : "no deposit"}</small></>}
+        : <><strong>${collect(j)}</strong><span>{past ? "collected on the day" : "to collect"}</span><small>${j.total} total{j.discount ? ` (−$${j.discount} first visit)` : ""} · {j.paid ? `$${j.deposit} paid` : "no deposit"}</small></>}
     </div>
     {!past && <div className="job-actions">
       <a className="icon-button" href={`tel:${j.phone}`} aria-label={`Call ${j.name}, ${phone(j.phone)}`}><Icon d={icons.phone} />Call</a>

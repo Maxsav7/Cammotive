@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     }
     const d = await unseal(String(row!.details)) as BookingDetails;
     return json({ code: row!.code, status: row!.status, date: d.date, time: d.time, packageName: d.packageName, addOns: d.addOns,
-      total: d.total, deposit: Number(row!.deposit_cents) / 100 });
+      total: d.total, discount: d.discount ?? 0, deposit: Number(row!.deposit_cents) / 100 });
   } catch (error) { return failure(error); }
 }
 

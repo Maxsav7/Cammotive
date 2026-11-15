@@ -11,6 +11,7 @@ export type BookingDetails = {
   packageName: string; addOns: string; total: number; date: string; time: Slot;
   name: string; email: string; phone: string; vehicle: string; address: string;
   sequence?: number; // times rescheduled, for calendar invites
+  discount?: number; // first-visit discount already taken off `total` (lib/first-visit.ts)
 };
 
 const PHONE = "(210) 573-0671";
@@ -22,7 +23,9 @@ export function longDate(date: string) {
 const prettyPhone = (phone: string) => phone.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
 const firstName = (name: string) => name.trim().split(/\s+/)[0];
 const service = (d: BookingDetails) => `${d.packageName}${d.addOns ? ` + ${d.addOns}` : ""}`;
-const balance = (d: BookingDetails) => `$${d.total} estimate. $${depositDollars} deposit paid, about $${Math.max(0, d.total - depositDollars)} due when the detail is done`;
+// "after your $25 first-visit discount" when one applies; `total` already includes it.
+export const discountNote = (d: Pick<BookingDetails, "discount">) => d.discount ? ` after your $${d.discount} first-visit discount` : "";
+const balance = (d: BookingDetails) => `$${d.total} estimate${discountNote(d)}. $${depositDollars} deposit paid, about $${Math.max(0, d.total - depositDollars)} due when the detail is done`;
 const summary = (d: BookingDetails) =>
   `${service(d)}\n${longDate(d.date)}, ${slotLabel[d.time] ?? d.time} (we arrive at ${d.time})\n${d.vehicle}\n${d.address}\n${balance(d)} (final price confirmed before work begins)`;
 const arrivalNotes = [
