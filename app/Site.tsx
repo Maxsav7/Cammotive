@@ -169,9 +169,10 @@ export default function Site({ page = "home" }: { page?: string }) {
       <div id="main-content">
         {isHome ? <>
           <section className="hero" id="home"><img className="hero-photo" src="/work/mclaren-hero.jpg" alt="Black McLaren with its door raised, detailed by Camotive" fetchPriority="high" /><div className="hero-shade" />
-            <div className="hero-copy"><a className="offer-strip" href="/book"><b>${firstVisitDiscount} off</b><span>your first detail</span><i aria-hidden="true">→</i></a><p className="hero-location">We come to you, anywhere in San Antonio</p><h1>Mobile car detailing in San Antonio</h1>
+            <div className="hero-copy"><p className="hero-location">We come to you, anywhere in San Antonio</p><h1>Mobile car detailing in San Antonio</h1>
               <p className="hero-lede">Hand detailing at your home or workplace. Pick an open time online and it&apos;s booked instantly.</p>
               <div className="hero-actions"><a className="button" href="/book">Book a detail</a><NextOpening /></div>
+              <p className="hero-offer"><strong>${firstVisitDiscount} off your first detail.</strong> Taken off automatically when you book.</p>
               <p className="hero-quote">Ceramic coating or paint correction? <a href="/quote">Request a quote</a></p>
               <a className="hero-rating" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Rated 5.0 out of 5 — view Camotive on Google (opens in a new tab)"><b className="google-g" aria-hidden="true">G</b><strong>5.0</strong><span aria-hidden="true">★★★★★</span><small>Google reviews</small></a></div></section>
           <ServiceStories />
