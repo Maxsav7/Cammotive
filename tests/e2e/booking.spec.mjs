@@ -65,6 +65,7 @@ async function bookUntilCheckout(page, email, { service = "premium", addOn = tru
   await expect(page.locator(".deposit-summary")).toContainText("$50");
   const pay = page.getByRole("button", { name: "Pay $50 deposit" });
   await expect(pay).toBeDisabled(); // the non-refundable deposit must be acknowledged first
+  await expect(page.locator('.agree a[href="/terms"]')).toBeVisible();
   await page.getByLabel(/non-refundable if I cancel/).check();
   await expect(pay).toBeEnabled();
   await pay.click();

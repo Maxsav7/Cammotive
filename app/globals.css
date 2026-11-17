@@ -1022,3 +1022,34 @@ p { text-wrap: pretty; }
   .admin-bar .brand { display: none; }
   .admin-bar-title { padding-left: 0; border-left: 0; }
 }
+
+/* Terms of Service (/terms): readable column with a sticky contents list on wide screens. */
+.agree a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.footer-bottom p a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.terms { display: grid; grid-template-columns: 260px minmax(0, 720px); gap: 64px; justify-content: center; padding-top: 72px; }
+.terms-toc { position: sticky; top: 104px; align-self: start; font-size: 14px; }
+.terms-toc p { margin: 0 0 14px; color: var(--muted); }
+.terms-toc ol { margin: 0; padding: 0 0 0 20px; display: grid; gap: 9px; color: var(--muted); }
+.terms-toc a { color: var(--muted); text-decoration: none; line-height: 1.4; }
+.terms-toc a:hover, .terms-toc a:focus-visible { color: var(--text); }
+.terms-body { font-size: 16px; line-height: 1.7; color: var(--muted); }
+.terms-body strong { color: var(--text); font-weight: 600; }
+.terms-body a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.terms-body ul { padding-left: 22px; display: grid; gap: 8px; list-style: disc; }
+.terms-body ul ul { list-style: circle; }
+.terms-body li::marker { color: var(--muted); }
+.terms-body ul ul { margin-top: 8px; }
+.terms-summary { padding: 28px 30px; border-radius: 20px; border: 1px solid var(--line-strong); margin-bottom: 56px; }
+.terms-summary h2 { margin: 0 0 14px; font-size: 22px; color: var(--text); }
+.terms-summary ul { margin: 0; }
+.terms-summary > p { margin: 16px 0 0; font-size: 14px; }
+.terms-section { scroll-margin-top: 96px; padding: 34px 0; border-top: 1px solid var(--line); }
+.terms-section h2 { display: flex; align-items: baseline; gap: 14px; margin: 0 0 14px; font-size: clamp(20px, 2.2vw, 24px); color: var(--text); letter-spacing: -0.01em; }
+.terms-section h2 span { flex: none; font-size: 14px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.6em; }
+.terms-section p { margin: 0 0 12px; }
+.terms-section p:last-child, .terms-section ul:last-child { margin-bottom: 0; }
+@media (max-width: 900px) {
+  .terms { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 40px; }
+  .terms-toc { display: none; }
+  .terms-summary { padding: 22px 20px; margin-bottom: 36px; }
+}

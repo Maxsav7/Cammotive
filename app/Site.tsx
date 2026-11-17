@@ -14,6 +14,7 @@ import ManageBooking from "./ManageBooking";
 import AdminDashboard from "./AdminDashboard";
 import NextOpening from "./NextOpening";
 import MyAppointments from "./MyAppointments";
+import TermsOfService from "./TermsOfService";
 import { AfterYouBook, CoatingStory, CorrectionStory, DetailChooser, DetailingStories } from "./ServiceInfo";
 import { googleProfileUrl } from "../lib/links";
 import { depositDollars, firstVisitDiscount } from "../lib/booking-catalog";
@@ -85,6 +86,7 @@ export default function Site({ page = "home" }: { page?: string }) {
     contact: ["Let's talk about your vehicle.", "Questions about a service, your location or your paint? Call or text us directly."],
     book: ["Book your detail.", `Choose your detail and add-ons, pick an open time, and pay a $${depositDollars} deposit to confirm it.`],
     quote: ["Request a quote.", "Ceramic coating and paint correction are quoted after we understand your vehicle. Tell us about it and we'll reply within one business day."],
+    terms: ["Terms of Service.", "The agreement for every Camotive appointment: deposits, cancellations, pricing and what we each look after."],
     appointment: ["My appointments.", "See every detail you've booked with us, or cancel an upcoming one. We'll email you a code to sign in."],
   };
   const title = currentArea ? [`Mobile detailing in ${currentArea[1]}.`, "Professional interior and exterior care at your home or workplace, plus ceramic protection and paint correction by quote."] : titles[page];
@@ -92,7 +94,7 @@ export default function Site({ page = "home" }: { page?: string }) {
   const pageNames: Record<string, string> = {
     "mobile-detailing": "Detailing", "ceramic-coating": "Ceramic Coating", "paint-correction": "Paint Correction",
     locations: "Service area", "our-work": "Our Work", reviews: "Reviews", contact: "Contact", about: "About Us",
-    book: "Book a detail", quote: "Request a quote", appointment: "My appointments",
+    book: "Book a detail", quote: "Request a quote", appointment: "My appointments", terms: "Terms of Service",
   };
   const crumbs: [string, string?][] = currentArea ? [["Service area", "/locations"], [currentArea[1]]] : [[pageNames[page] ?? ""]];
   const navLinks = [
@@ -179,7 +181,7 @@ export default function Site({ page = "home" }: { page?: string }) {
           {pricing}
           <AfterYouBook />
         </> : page === "manage" || page === "admin" ? null : <section className="inner-hero"><div className="inner-hero-copy"><nav className="breadcrumb" aria-label="Breadcrumb"><ol><li><a href="/">Home</a></li>{crumbs.map(([label, href]) => <li key={label}>{href ? <a href={href}>{label}</a> : <span aria-current="page">{label}</span>}</li>)}</ol></nav><h1>{title?.[0]}</h1><p>{title?.[1]}</p>
-          {!["book", "appointment", "quote"].includes(page) && <div className="hero-actions">{page === "reviews" ? <><a className="button" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Read our Google reviews (opens in a new tab)">Read our Google reviews</a><a className="outline-button" href="/book">Book a detail</a></>
+          {!["book", "appointment", "quote", "terms"].includes(page) && <div className="hero-actions">{page === "reviews" ? <><a className="button" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Read our Google reviews (opens in a new tab)">Read our Google reviews</a><a className="outline-button" href="/book">Book a detail</a></>
             : <>{quoteCta ? <a className="button" href={`/quote?service=${page === "paint-correction" ? "correction" : "ceramic"}`}>Request a quote</a> : <a className="button" href="/book">Book a detail</a>}<a className="outline-button" href="tel:+12105730671">Call (210) 573-0671</a></>}</div>}</div>
           {heroImage[page] && <img src={heroImage[page][0]} alt={heroImage[page][1]} />}</section>}
 
@@ -197,6 +199,7 @@ export default function Site({ page = "home" }: { page?: string }) {
         {page === "manage" && <ManageBooking />}
         {page === "admin" && <AdminDashboard />}
         {page === "appointment" && <MyAppointments />}
+        {page === "terms" && <TermsOfService />}
         {(isHome || ["mobile-detailing", "locations"].includes(page) || currentArea) && faq}
         {page !== "manage" && page !== "admin" && <section className="final-cta">{/* The CLA also appears in the gallery and coating showcase; don't show it twice. */}{!["our-work", "ceramic-coating"].includes(page) && <img src="/work/mercedes-cla-rear.jpg" alt="" loading="lazy" decoding="async" />}
           {quoteCta && page !== "quote" ? <><h2>Ready for a quote?</h2><p>Tell us about your vehicle and what you&apos;d like. We reply within one business day.</p><div className="hero-actions"><a className="button" href={`/quote?service=${page === "paint-correction" ? "correction" : "ceramic"}`}>Request a quote</a><a className="outline-button" href="sms:+12105730671">Text us photos</a></div></>
@@ -207,7 +210,7 @@ export default function Site({ page = "home" }: { page?: string }) {
         <div><h3>Book</h3><a href="/book">Book a detail</a><a href="/quote">Request a quote</a><a href="/appointment">My appointment</a><a href="tel:+12105730671">(210) 573-0671</a></div>
         <div><h3>Services</h3>{navLinks.map(l => <a key={l.href} href={l.href}>{l.title}</a>)}<a href="/locations">Service area</a></div>
         <div><h3>Camotive</h3><a href="/our-work">Our Work</a><a href={googleProfileUrl} target="_blank" rel="noopener noreferrer">Reviews<span className="sr-only"> on Google (opens in a new tab)</span></a><a href="/contact">Contact</a><a href="/about">About Us</a><a className="footer-rating" href={googleProfileUrl} target="_blank" rel="noreferrer"><span>★★★★★</span><strong>5.0 on Google</strong></a></div></div>
-        <div className="footer-bottom"><p>© {new Date().getFullYear()} Camotive Detailing</p><small>Photos and videos by Camotive Detailing</small></div></footer>
+        <div className="footer-bottom"><p>© {new Date().getFullYear()} Camotive Detailing · <a href="/terms">Terms of Service</a></p><small>Photos and videos by Camotive Detailing</small></div></footer>
       {!["book", "manage", "admin"].includes(page) && <a className="mobile-booking-cta" href={quoteCta ? "/quote" : "/book"}>{quoteCta ? "Request a quote" : "Book a detail"}</a>}
     </main>
   );
