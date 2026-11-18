@@ -29,6 +29,9 @@ export const quoteServices = {
 // Paid online when booking. It goes toward the total and is kept if the customer
 // cancels; it's refunded if Camotive has to cancel.
 export const depositDollars = 50;
+// Taken off the total of a customer's first online booking (see lib/first-visit.ts).
+// The deposit stays the same, so the balance paid on the day is lower.
+export const firstVisitDiscount = 25;
 // How long a slot is held while the customer pays (Stripe's minimum is 30 minutes).
 export const holdMinutes = 30;
 // Furthest date that can be requested online.

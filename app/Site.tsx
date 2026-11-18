@@ -16,7 +16,7 @@ import NextOpening from "./NextOpening";
 import MyAppointments from "./MyAppointments";
 import { AfterYouBook, CoatingStory, CorrectionStory, DetailChooser, DetailingStories } from "./ServiceInfo";
 import { googleProfileUrl } from "../lib/links";
-import { depositDollars } from "../lib/booking-catalog";
+import { depositDollars, firstVisitDiscount } from "../lib/booking-catalog";
 
 type PackageId = "full" | "premium" | "maintenance" | "ceramic3" | "ceramic5";
 type VehicleSize = "small" | "medium" | "large";
@@ -107,7 +107,7 @@ export default function Site({ page = "home" }: { page?: string }) {
 
   const pricing = <section className="section pricing-section" id="pricing">
     <div className="section-heading"><p className="eyebrow">Pricing</p><h2>Clear prices, before you book.</h2><p>Choose your vehicle size to see starting prices. We confirm the final price before work begins.</p></div>
-    <div className="pricing-notice">Mobile service anywhere in San Antonio. A ${depositDollars} deposit, paid when you book, confirms your time and goes toward your total. <a href="/book">Book a detail</a></div>
+    <div className="pricing-notice"><span>Mobile service anywhere in San Antonio. A ${depositDollars} deposit, paid when you book, confirms your time and goes toward your total. New customers get <strong>${firstVisitDiscount} off their first detail</strong>, taken off automatically when booking.</span> <a href="/book">Book a detail</a></div>
     <div className="pricing-step"><span>1</span><div><h3>Choose a service</h3><p>Detailing is booked online. Coatings are quoted first.</p></div></div>
     <div className="category-tabs" role="tablist" aria-label="Service category">
       <button id="detail-tab" role="tab" aria-selected={category === "detailing"} aria-controls="packages-panel" tabIndex={category === "detailing" ? 0 : -1} onKeyDown={e => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setCategory("ceramic"); document.getElementById("ceramic-tab")?.focus(); } }} className={category === "detailing" ? "selected" : ""} onClick={() => setCategory("detailing")}><strong>Detailing</strong><small>Book online</small></button>
@@ -146,6 +146,7 @@ export default function Site({ page = "home" }: { page?: string }) {
   return (
     <main className={`site-shell ${isHome ? "home-page" : "inner-page"}`} data-theme={theme}>
       <a className="skip-link" href="#main-content">Skip to content</a>
+      {page !== "book" && <a className="announcement" href="/book"><span>New customers get <b>${firstVisitDiscount} off</b> their first detail</span><span className="announcement-cta">Book now <i aria-hidden="true">→</i></span></a>}
       <div className="header-wrap">
         <header className={`site-header ${scrolled || !isHome || mobileMenu ? "solid" : ""}`}>
           <a className="brand" href="/" aria-label="Camotive Detailing home"><Logo /></a>

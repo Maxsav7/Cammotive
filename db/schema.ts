@@ -90,6 +90,17 @@ export const adminCredentials = sqliteTable("admin_credentials", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+// First-visit discount: one row per email and per phone number that has had its
+// discount (keyed hashes only, so no contact details are stored). Recorded when a
+// discounted booking's deposit is paid; removed again if Camotive cancels and
+// refunds that booking. Not tied to the booking's lifetime, so it outlasts the
+// booking's own deletion.
+export const firstVisitClaims = sqliteTable("first_visit_claims", {
+  keyHash: text("key_hash").primaryKey(),
+  code: text("code").notNull(),
+  createdAt: integer("created_at").notNull(),
+}, table => [index("first_visit_claims_code").on(table.code)]);
+
 // Time Cam has blocked off from the dashboard: one window ("8:00 AM") or the whole
 // day ("all"). Blocked windows show as taken and can't be booked.
 export const blockedSlots = sqliteTable("blocked_slots", {

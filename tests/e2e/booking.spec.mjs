@@ -92,6 +92,7 @@ test("book with a deposit, view in My appointments, cancel and keep the deposit"
   const code = (await page.locator(".done-summary dd").first().textContent())?.trim();
   expect(code).toMatch(/^CAM-[A-F0-9]{12}$/);
   await expect(page.locator(".done-summary")).toContainText("Engine bay cleaning");
+  await expect(page.locator(".done-summary")).toContainText("$25 off your first visit", { useInnerText: true }); // a first booking for this email and phone
 
   // Confirmation with an invite and a link to My appointments; Cam notified; calendar event.
   const [booked] = await emailsTo(request, email, /^Booked:/);

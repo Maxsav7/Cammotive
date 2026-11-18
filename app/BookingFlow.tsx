@@ -4,7 +4,7 @@
 // Checkout page. Payment confirms the booking; customers come back here to see it.
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
-import { prices, extras, bookingTimes, depositDollars, holdMinutes, slotLabel, slotPart } from "../lib/booking-catalog";
+import { prices, extras, bookingTimes, depositDollars, firstVisitDiscount, holdMinutes, slotLabel, slotPart } from "../lib/booking-catalog";
 
 type PackageId = "full" | "premium" | "maintenance";
 type AddOnId = keyof typeof extras;
@@ -23,7 +23,7 @@ const sizes: Record<Size, string> = { small: "Coupe or sedan", medium: "Crossove
 const steps = ["Service", "Add-ons", "Date & time", "Your details", "Deposit"];
 const SAVED = "camotive-booking";
 type Saved = { pkg: PackageId; size: Size; addOns: AddOnId[]; date: string; time: Slot | ""; contact: Record<"name" | "phone" | "email" | "vehicle" | "address", string> };
-type Booked = { code: string; status: string; date: string; time: string; packageName: string; addOns: string; total: number; deposit: number };
+type Booked = { code: string; status: string; date: string; time: string; packageName: string; addOns: string; total: number; discount?: number; deposit: number };
 // The booking is kept in this tab while the customer is on Stripe's page, so coming
 // back (paid or not) doesn't lose it. Storage can be unavailable; that's fine.
 const save = (value: Saved) => { try { sessionStorage.setItem(SAVED, JSON.stringify(value)); } catch {} };
@@ -106,6 +106,7 @@ export default function BookingFlow() {
   const [time, setTime] = useState<Slot | "">("");
   const [contact, setContact] = useState({ name: "", phone: "", email: "", vehicle: "", address: "" });
   const [agreed, setAgreed] = useState(false);
+  const [firstTime, setFirstTime] = useState(false); // text-mode only: the customer says so; online it's checked automatically
   const [botToken, setBotToken] = useState("");
   const [challenge, setChallenge] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -189,7 +190,7 @@ export default function BookingFlow() {
         if (/taken|released/.test(result.error ?? "")) { setTime(""); go(3); setError(result.error); return; }
       }
       if (!response.ok || !result.confirmationCode) { setError(result.error || `We couldn't start the payment. Please call or text ${PHONE}.`); return; }
-      if (result.status === "confirmed") { forget(); setDone({ code: result.confirmationCode, status: "confirmed", date, time, packageName: result.packageName, addOns: result.addOns, total: result.total, deposit: result.deposit }); return; }
+      if (result.status === "confirmed") { forget(); setDone({ code: result.confirmationCode, status: "confirmed", date, time, packageName: result.packageName, addOns: result.addOns, total: result.total, discount: result.discount, deposit: result.deposit }); return; }
       save({ pkg, size, addOns, date, time, contact });
       window.location.assign(result.checkoutUrl);
       return; // keep the button busy while the browser leaves for Stripe
@@ -206,7 +207,8 @@ export default function BookingFlow() {
   const textMode = !status.enabled;
   const smsBody = [`Hi Camotive, I'd like to book:`, `${serviceLine}${addOns.length ? ` + ${addOnLine}` : ""}`,
     date && time ? `${fmt(date, { weekday: "long", month: "long", day: "numeric" })}, ${slotLabel[time]}` : "",
-    `Vehicle: ${contact.vehicle}`, `Address: ${contact.address}`, `${contact.name}, ${contact.phone}, ${contact.email}`, `Estimate: $${total}`].filter(Boolean).join("\n");
+    `Vehicle: ${contact.vehicle}`, `Address: ${contact.address}`, `${contact.name}, ${contact.phone}, ${contact.email}`, `Estimate: $${total}`,
+    firstTime ? `This is my first booking with Camotive ($${firstVisitDiscount} off)` : ""].filter(Boolean).join("\n");
 
   if (done) return <div className="booking-shell" ref={top}><div className="booking-done" role="status">
     <p className="eyebrow"><span className="status-dot" aria-hidden="true" />Confirmed</p>
@@ -216,7 +218,7 @@ export default function BookingFlow() {
       <div><dt>Reference</dt><dd>{done.code}</dd></div>
       <div><dt>When</dt><dd>{fmt(done.date, { weekday: "long", month: "long", day: "numeric" })}, {slotLabel[done.time] ?? done.time}</dd></div>
       <div><dt>Service</dt><dd>{done.packageName.replace(" · ", ", ")}{done.addOns ? ` + ${done.addOns}` : ""}</dd></div>
-      <div><dt>Balance</dt><dd>${Math.max(0, done.total - done.deposit)} due on the day</dd></div>
+      <div><dt>Balance</dt><dd>${Math.max(0, done.total - done.deposit)} due on the day{done.discount ? <small className="done-discount">Includes ${done.discount} off your first visit</small> : null}</dd></div>
     </dl>
     <ol className="after-steps">
       <li><strong>Now</strong> Check your inbox for the confirmation and calendar invite.</li>
@@ -235,6 +237,7 @@ export default function BookingFlow() {
 
     {step === 1 && <div className="booking-panel">
       <h3 tabIndex={-1}>Choose your detail</h3>
+      <p className="first-visit-note"><strong>${firstVisitDiscount} off your first detail.</strong> New customers get it automatically when booking.</p>
       <div className="package-choice" role="radiogroup" aria-label="Detail package">
         {(Object.keys(packages) as PackageId[]).map(id => <button type="button" role="radio" aria-checked={pkg === id} key={id} className={pkg === id ? "selected" : ""} onClick={() => setPkg(id)}>
           <span className="package-name">{prices[id].name}</span><span className="package-price">from ${prices[id].small}</span>
@@ -290,8 +293,10 @@ export default function BookingFlow() {
         <div><dt>Where</dt><dd>{contact.address}<br />{contact.vehicle}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
         <div><dt>Contact</dt><dd>{contact.name}<br />{contact.phone} · {contact.email}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
       </dl>
+      <label className="agree"><input type="checkbox" checked={firstTime} onChange={e => setFirstTime(e.target.checked)} />
+        <span>This is my first booking with Camotive (<strong>${firstVisitDiscount} off</strong>).</span></label>
       <p className="text-mode-note" role="note">Online payment isn&apos;t available yet. Send this booking to us by text and we&apos;ll confirm your time and how to pay the ${depositDollars} deposit that holds it.</p>
-      <div className="booking-footer"><div><small>Estimated total</small><strong>${total}</strong></div>
+      <div className="booking-footer"><div><small>Estimated total{firstTime ? ` after $${firstVisitDiscount} off` : ""}</small><strong>${firstTime ? Math.max(0, total - firstVisitDiscount) : total}</strong></div>
         <div className="hero-actions"><a className="outline-button" href="tel:+12105730671">Call {PHONE}</a><a className="button" href={`sms:+12105730671?&body=${encodeURIComponent(smsBody)}`}>Text us this booking</a></div></div>
     </div>}
 
@@ -310,6 +315,7 @@ export default function BookingFlow() {
         <div><dt>Deposit due now</dt><dd>${depositDollars}</dd></div>
         <div><dt>Due on the day</dt><dd>${Math.max(0, total - depositDollars)}</dd></div>
       </dl>
+      <p className="first-visit-note"><strong>First booking with Camotive?</strong> ${firstVisitDiscount} comes off your total automatically, so you pay ${firstVisitDiscount} less on the day. It shows on your confirmation.</p>
       <ul className="review-notes">
         <li>The deposit confirms your time and goes toward your total. We confirm the final price before starting.</li>
         <li>You&apos;ll pay on Stripe&apos;s secure checkout. We hold this time for {holdMinutes} minutes while you pay.</li>

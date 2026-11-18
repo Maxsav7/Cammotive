@@ -8,6 +8,7 @@ import { ACTIVE, activeParams, camToken, customerToken, isBlocked, releaseStaleH
 import { createDepositCheckout } from "@/lib/stripe";
 import { depositDollars, holdMinutes } from "@/lib/booking-catalog";
 import { longDate } from "@/lib/booking-emails";
+import { discountFor } from "@/lib/first-visit";
 
 const TAKEN = "That time was just taken. Please choose another slot.";
 
@@ -48,7 +49,11 @@ export async function POST(request: Request) {
     if (!requestKey || !/^[a-f0-9-]{36}$/i.test(requestKey)) throw new HttpError(400, "A valid request key is required.");
     const { turnstileToken, ...details } = parsed.data;
     const fingerprint = await digest(JSON.stringify(details));
-    const calculated = estimate(parsed.data);
+    // $25 off a first visit. Decided here, on the server, and never reported on its
+    // own, so the booking form can't be used to check whether someone is a customer.
+    const base = estimate(parsed.data);
+    const discount = await discountFor(details.email, details.phone, requestKey);
+    const calculated = { ...base, total: base.total - discount, discount };
     const previous = await replay(requestKey, fingerprint, calculated);
     if (previous) return previous;
     await releaseStaleHolds(details.date, details.time);
@@ -91,7 +96,7 @@ export async function POST(request: Request) {
       const session = await createDepositCheckout({
         code, email: details.email, amountCents: depositDollars * 100,
         title: `Deposit: ${calculated.packageName.replace(" · ", ", ")}`,
-        description: `${longDate(details.date)} at ${details.time}. Goes toward your total; non-refundable if you cancel.`,
+        description: `${longDate(details.date)} at ${details.time}. Goes toward your total${discount ? ` ($${calculated.total} after your $${discount} first-visit discount)` : ""}; non-refundable if you cancel.`,
         successUrl: `${origin}/book?paid={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${origin}/book?unpaid=${code}&release=${releaseToken}`,
         expiresAt,

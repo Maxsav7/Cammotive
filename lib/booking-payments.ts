@@ -13,6 +13,10 @@ import { emailJobs, sendQueuedEmailsSoon, type OutboxJob } from "./booking-outbo
 import { bookedEmail, camBookingEmail, camCancelledEmail, cancelledEmail, rescheduledEmail, slotLostEmail, type BookingDetails } from "./booking-emails";
 import { googleCalendarReady } from "./google-calendar";
 import { refundDeposit, type CheckoutSession } from "./stripe";
+import { claimFirstVisit, releaseFirstVisit } from "./first-visit";
+
+// For Cam's calendar event: the estimate, noting a first-visit discount.
+const estimateLine = (d: BookingDetails) => `Estimate $${d.total}${d.discount ? ` (after $${d.discount} first-visit discount)` : ""}, $50 deposit paid`;
 
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -48,7 +52,7 @@ export async function ensureNotified(code: string) {
   ];
   if (googleCalendarReady()) jobs.push([`${code}-calendar`, { kind: "calendar", op: "create", event: {
     code, date: d.date, time: d.time, title: `${d.packageName}: ${d.name}`, location: d.address,
-    description: [`${d.packageName}${d.addOns ? ` + ${d.addOns}` : ""}`, `Estimate $${d.total}, $50 deposit paid`, "",
+    description: [`${d.packageName}${d.addOns ? ` + ${d.addOns}` : ""}`, estimateLine(d), "",
       d.name, d.phone, d.email, d.vehicle, "", `Reference ${code}. Booked online at Camotive.`].join("\n"),
   } }]);
   try { await (await emailJobs(code, jobs)).run(); }
@@ -81,6 +85,7 @@ export async function confirmPaid(session: CheckoutSession) {
     await refundLostSlot(code, session.payment_intent);
     return code;
   }
+  await claimFirstVisit(code);
   await ensureNotified(code);
   return code;
 }
@@ -126,6 +131,7 @@ export async function cancelBooking(code: string, by: "customer" | "camotive") {
     await db.prepare("UPDATE secure_bookings SET status = 'confirmed' WHERE code = ? AND status = 'cancelled'").bind(code).run().catch(() => {});
     throw error;
   }
+  if (by === "camotive") await releaseFirstVisit(code); // refunded, so the discount wasn't used
   sendQueuedEmailsSoon();
   return d;
 }
@@ -157,7 +163,7 @@ export async function rescheduleBooking(code: string, date: string, time: Bookin
   const jobs: [string, OutboxJob][] = [[`${code}-moved-${moved.sequence}`, rescheduledEmail(code, moved, from)]];
   if (googleCalendarReady()) jobs.push([`${code}-calendar-move-${moved.sequence}`, { kind: "calendar", op: "move", event: {
     code, date, time, title: `${moved.packageName}: ${moved.name}`, location: moved.address,
-    description: [`${moved.packageName}${moved.addOns ? ` + ${moved.addOns}` : ""}`, `Estimate $${moved.total}, $50 deposit paid`, "",
+    description: [`${moved.packageName}${moved.addOns ? ` + ${moved.addOns}` : ""}`, estimateLine(moved), "",
       moved.name, moved.phone, moved.email, moved.vehicle, "", `Reference ${code}. Booked online at Camotive.`].join("\n"),
   } }]);
   try {
