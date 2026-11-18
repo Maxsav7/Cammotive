@@ -12,6 +12,7 @@ export type BookingDetails = {
   name: string; email: string; phone: string; vehicle: string; address: string;
   sequence?: number; // times rescheduled, for calendar invites
   discount?: number; // first-visit discount already taken off `total` (lib/first-visit.ts)
+  termsVersion?: string; termsAcceptedAt?: number; // Terms of Service the customer accepted, and when (unix seconds)
 };
 
 const PHONE = "(210) 573-0671";

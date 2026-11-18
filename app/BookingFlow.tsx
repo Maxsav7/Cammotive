@@ -4,6 +4,7 @@
 // Checkout page. Payment confirms the booking; customers come back here to see it.
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
+import { TERMS_VERSION } from "../lib/terms";
 import { prices, extras, bookingTimes, depositDollars, firstVisitDiscount, holdMinutes, slotLabel, slotPart } from "../lib/booking-catalog";
 
 type PackageId = "full" | "premium" | "maintenance";
@@ -183,7 +184,7 @@ export default function BookingFlow() {
     const signature = JSON.stringify(payload);
     if (submission.current.signature !== signature) submission.current = { signature, key: crypto.randomUUID() };
     try {
-      const response = await fetch("/api/appointments", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": submission.current.key }, body: JSON.stringify({ ...payload, turnstileToken: botToken }) });
+      const response = await fetch("/api/appointments", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": submission.current.key }, body: JSON.stringify({ ...payload, acceptedTerms: TERMS_VERSION, turnstileToken: botToken }) });
       const result = await response.json();
       if (response.status === 409) {
         submission.current = { signature: "", key: "" };
@@ -208,7 +209,8 @@ export default function BookingFlow() {
   const smsBody = [`Hi Camotive, I'd like to book:`, `${serviceLine}${addOns.length ? ` + ${addOnLine}` : ""}`,
     date && time ? `${fmt(date, { weekday: "long", month: "long", day: "numeric" })}, ${slotLabel[time]}` : "",
     `Vehicle: ${contact.vehicle}`, `Address: ${contact.address}`, `${contact.name}, ${contact.phone}, ${contact.email}`, `Estimate: $${total}`,
-    firstTime ? `This is my first booking with Camotive ($${firstVisitDiscount} off)` : ""].filter(Boolean).join("\n");
+    firstTime ? `This is my first booking with Camotive ($${firstVisitDiscount} off)` : "",
+    `I agree to the Camotive Terms of Service (${TERMS_VERSION}).`].filter(Boolean).join("\n");
 
   if (done) return <div className="booking-shell" ref={top}><div className="booking-done" role="status">
     <p className="eyebrow"><span className="status-dot" aria-hidden="true" />Confirmed</p>
@@ -295,9 +297,12 @@ export default function BookingFlow() {
       </dl>
       <label className="agree"><input type="checkbox" checked={firstTime} onChange={e => setFirstTime(e.target.checked)} />
         <span>This is my first booking with Camotive (<strong>${firstVisitDiscount} off</strong>).</span></label>
+      <label className="agree"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} required />
+        <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service<span className="sr-only"> (opens in a new tab)</span></a>, including that the ${depositDollars} deposit is <strong>non-refundable if I cancel</strong>.</span></label>
       <p className="text-mode-note" role="note">Online payment isn&apos;t available yet. Send this booking to us by text and we&apos;ll confirm your time and how to pay the ${depositDollars} deposit that holds it.</p>
       <div className="booking-footer"><div><small>Estimated total{firstTime ? ` after $${firstVisitDiscount} off` : ""}</small><strong>${firstTime ? Math.max(0, total - firstVisitDiscount) : total}</strong></div>
-        <div className="hero-actions"><a className="outline-button" href="tel:+12105730671">Call {PHONE}</a><a className="button" href={`sms:+12105730671?&body=${encodeURIComponent(smsBody)}`}>Text us this booking</a></div></div>
+        <div className="hero-actions"><a className="outline-button" href="tel:+12105730671">Call {PHONE}</a>{agreed ? <a className="button" href={`sms:+12105730671?&body=${encodeURIComponent(smsBody)}`}>Text us this booking</a>
+          : <button type="button" className="button" disabled title="Agree to the Terms of Service first">Text us this booking</button>}</div></div>
     </div>}
 
     {step === 5 && !textMode && <form className="booking-panel" onSubmit={pay}>
@@ -322,7 +327,7 @@ export default function BookingFlow() {
         <li>Please have water and a power outlet within reach, and access to the parking spot.</li>
       </ul>
       <label className="agree"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} required />
-        <span>I understand the ${depositDollars} deposit is <strong>non-refundable if I cancel</strong>. If Camotive has to cancel, it&apos;s refunded in full.</span></label>
+        <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service<span className="sr-only"> (opens in a new tab)</span></a>, including that the ${depositDollars} deposit is <strong>non-refundable if I cancel</strong>. If Camotive has to cancel, it&apos;s refunded in full.</span></label>
       <BookingChallenge key={challenge} siteKey={status.siteKey!} action="booking" onToken={setBotToken} />
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="booking-footer"><div><small>Deposit due now</small><strong>${depositDollars}</strong></div><button className="button" type="submit" disabled={busy || !botToken || !agreed}>{busy ? "Opening secure checkout…" : `Pay $${depositDollars} deposit`}</button></div>

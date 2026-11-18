@@ -166,6 +166,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const maintenance = load(resolve(root, "app/api/internal/booking-maintenance/route.ts"));
     const outbox = load(resolve(root, "lib/booking-outbox.ts"));
     const security = load(resolve(root, "lib/booking-security.ts"));
+    const { TERMS_VERSION: termsVersion } = load(resolve(root, "lib/terms.ts"));
     const store = load(resolve(root, "lib/booking-store.ts"));
     const availability = load(resolve(root, "app/api/availability/route.ts"));
     const admin = load(resolve(root, "app/api/admin/booking/route.ts"));
@@ -178,7 +179,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       body: JSON.stringify({ code, action }) }));
     const slots = async (from, days = 3) => (await (await availability.GET(new Request(`https://booking.example.com/api/availability?from=${from}&days=${days}`))).json());
     const future = offset => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
-    const valid = () => ({ packageId: "full", vehicleSize: "small", addOnIds: ["engine"], date: future(7), time: "8:00 AM", name: "Audit Customer", email: "audit@example.com", phone: "2105550123", vehicle: "2024 Test Sedan", address: "100 Synthetic Street", turnstileToken: "valid-booking" });
+    const valid = () => ({ packageId: "full", vehicleSize: "small", addOnIds: ["engine"], date: future(7), time: "8:00 AM", name: "Audit Customer", email: "audit@example.com", phone: "2105550123", vehicle: "2024 Test Sedan", address: "100 Synthetic Street", acceptedTerms: termsVersion, turnstileToken: "valid-booking" });
     const request = (data, key = crypto.randomUUID(), headers = {}) => new Request("https://booking.example.com/api/appointments", {
       method: "POST", headers: { origin: "https://booking.example.com", "content-type": "application/json", "idempotency-key": key, ...headers }, body: JSON.stringify(data),
     });
@@ -246,6 +247,12 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       await t.test("bot success, hostname and action must all match", async () => {
         await reset();
         assert.equal((await route.POST(request({ ...valid(), turnstileToken: "invalid" }))).status, 400);
+        // The Terms of Service must be accepted, and the current version of them.
+        const { acceptedTerms: _, ...withoutTerms } = valid();
+        assert.equal((await route.POST(request(withoutTerms))).status, 400, "terms not accepted");
+        const outdated = await route.POST(request({ ...valid(), acceptedTerms: "2020-01-01" }));
+        assert.equal(outdated.status, 409); assert.match((await outdated.json()).error, /Terms of Service have been updated/);
+        assert.equal(await count("secure_bookings"), 0);
         assert.equal((await route.POST(request({ ...valid(), turnstileToken: "valid-recovery" }))).status, 400);
         wrongHost = true; assert.equal((await route.POST(request(valid()))).status, 400);
         assert.equal(await count("secure_bookings"), 0);
@@ -262,6 +269,11 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.equal(session.form.success_url, "https://booking.example.com/book?paid={CHECKOUT_SESSION_ID}");
         assert.match(session.form.cancel_url, /\/book\?unpaid=CAM-[A-F0-9]{12}&release=[a-f0-9]{32}$/);
         assert.match(session.form["custom_text[submit][message]"], /non-refundable if you cancel/);
+        assert.equal(session.form["metadata[terms_version]"], termsVersion, "accepted terms recorded on the Stripe payment");
+        assert.equal(session.form["payment_intent_data[metadata][terms_version]"], termsVersion);
+        const stored = await security.unseal((await database.prepare("SELECT details FROM secure_bookings WHERE code = ?").bind(result.confirmationCode).first()).details);
+        assert.equal(stored.termsVersion, termsVersion, "accepted terms kept with the booking");
+        assert.ok(Math.abs(stored.termsAcceptedAt - Date.now() / 1000) < 120);
         const row = await database.prepare("SELECT * FROM secure_bookings").first();
         assert.equal(row.status, "pending"); assert.ok(!JSON.stringify(row).includes("Synthetic Street"));
         assert.equal(await count("booking_outbox"), 0, "no confirmation before payment");

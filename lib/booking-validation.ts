@@ -26,6 +26,8 @@ export const bookingSchema = z.object({
   email: z.string().trim().email().max(254).transform(v => v.toLowerCase()),
   phone: z.string().max(30).transform(v => v.replace(/[ ()+.-]/g, "")).refine(v => /^(1)?[2-9]\d{9}$/.test(v)).transform(v => `+${v.length === 10 ? "1" : ""}${v}`),
   vehicle: text(3, 120), address: text(8, 250), turnstileToken: z.string().min(1).max(2048),
+  // The Terms of Service version the customer ticked to accept (lib/terms.ts).
+  acceptedTerms: z.string().max(20),
 }).strict();
 const email = z.string().trim().email().max(254).transform(v => v.toLowerCase());
 const bookingCode = z.string().trim().toUpperCase().regex(/^CAM-[A-F0-9]{12}$/);

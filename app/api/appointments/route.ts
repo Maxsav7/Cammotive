@@ -9,6 +9,7 @@ import { createDepositCheckout } from "@/lib/stripe";
 import { depositDollars, holdMinutes } from "@/lib/booking-catalog";
 import { longDate } from "@/lib/booking-emails";
 import { discountFor } from "@/lib/first-visit";
+import { TERMS_VERSION } from "@/lib/terms";
 
 const TAKEN = "That time was just taken. Please choose another slot.";
 
@@ -47,7 +48,10 @@ export async function POST(request: Request) {
     if (!parsed.success) throw new HttpError(400, "Please check your service, date and contact details.");
     const requestKey = request.headers.get("idempotency-key");
     if (!requestKey || !/^[a-f0-9-]{36}$/i.test(requestKey)) throw new HttpError(400, "A valid request key is required.");
-    const { turnstileToken, ...details } = parsed.data;
+    const { turnstileToken, acceptedTerms, ...details } = parsed.data;
+    // Customers must accept the current Terms of Service. An older version means the
+    // page was open from before the terms changed: they need to read the new ones.
+    if (acceptedTerms !== TERMS_VERSION) throw new HttpError(409, "Our Terms of Service have been updated. Please refresh the page, review them and tick the box again.");
     const fingerprint = await digest(JSON.stringify(details));
     // $25 off a first visit. Decided here, on the server, and never reported on its
     // own, so the booking form can't be used to check whether someone is a customer.
@@ -70,7 +74,8 @@ export async function POST(request: Request) {
     await limit("booking-budget", "global", 30, 86400);
     const now = Math.floor(Date.now() / 1000);
     const code = `CAM-${token().slice(0, 12).toUpperCase()}`;
-    const record: BookingDetails & Record<string, unknown> = { ...details, ...calculated };
+    // The accepted terms are kept with the booking, as evidence in case of a dispute.
+    const record: BookingDetails & Record<string, unknown> = { ...details, ...calculated, termsVersion: TERMS_VERSION, termsAcceptedAt: now };
     // 1. Hold the slot. The partial unique index makes this atomic: of two people
     //    racing for one slot, exactly one insert succeeds.
     let held;
@@ -99,7 +104,7 @@ export async function POST(request: Request) {
         description: `${longDate(details.date)} at ${details.time}. Goes toward your total${discount ? ` ($${calculated.total} after your $${discount} first-visit discount)` : ""}; non-refundable if you cancel.`,
         successUrl: `${origin}/book?paid={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${origin}/book?unpaid=${code}&release=${releaseToken}`,
-        expiresAt,
+        expiresAt, termsVersion: TERMS_VERSION,
       });
       if (!session.url) throw new Error("Checkout has no URL");
       await db.prepare("INSERT INTO booking_payments (code, checkout_id, checkout_url, hold_expires, deposit_cents) VALUES (?, ?, ?, ?, ?)")

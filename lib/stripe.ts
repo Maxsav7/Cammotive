@@ -34,7 +34,7 @@ async function stripe(path: string, init: { method?: string; body?: Record<strin
 
 export function createDepositCheckout(o: {
   code: string; email: string; amountCents: number; title: string; description: string;
-  successUrl: string; cancelUrl: string; expiresAt: number;
+  successUrl: string; cancelUrl: string; expiresAt: number; termsVersion: string;
 }): Promise<CheckoutSession> {
   return stripe("/checkout/sessions", {
     method: "POST", idempotencyKey: `checkout-${o.code}`,
@@ -49,8 +49,11 @@ export function createDepositCheckout(o: {
       client_reference_id: o.code,
       "metadata[booking_code]": o.code,
       "payment_intent_data[metadata][booking_code]": o.code,
+      // Shown on the payment in Stripe, as evidence if a deposit is ever disputed.
+      "metadata[terms_version]": o.termsVersion,
+      "payment_intent_data[metadata][terms_version]": o.termsVersion,
       "payment_intent_data[description]": `Camotive deposit ${o.code}`,
-      "custom_text[submit][message]": "This deposit confirms your appointment and goes toward your total. It's non-refundable if you cancel.",
+      "custom_text[submit][message]": "This deposit confirms your appointment and goes toward your total. It's non-refundable if you cancel, as set out in the Terms of Service you accepted.",
       success_url: o.successUrl,
       cancel_url: o.cancelUrl,
       expires_at: o.expiresAt,
