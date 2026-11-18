@@ -148,6 +148,7 @@ export default function Site({ page = "home" }: { page?: string }) {
   return (
     <main className={`site-shell ${isHome ? "home-page" : "inner-page"}`} data-theme={theme}>
       <a className="skip-link" href="#main-content">Skip to content</a>
+      {page !== "book" && <a className="announcement" href="/book"><span>New customers get <b>${firstVisitDiscount} off</b> their first detail</span><span className="announcement-cta">Book now <i aria-hidden="true">→</i></span></a>}
       <div className="header-wrap">
         <header className={`site-header ${scrolled || !isHome || mobileMenu ? "solid" : ""}`}>
           <a className="brand" href="/" aria-label="Camotive Detailing home"><Logo /></a>
@@ -174,7 +175,6 @@ export default function Site({ page = "home" }: { page?: string }) {
             <div className="hero-copy"><p className="hero-location">We come to you, anywhere in San Antonio</p><h1>Mobile car detailing in San Antonio</h1>
               <p className="hero-lede">Hand detailing at your home or workplace. Pick an open time online and it&apos;s booked instantly.</p>
               <div className="hero-actions"><a className="button" href="/book">Book a detail</a><NextOpening /></div>
-              <p className="hero-offer"><strong>${firstVisitDiscount} off your first detail.</strong> Taken off automatically when you book.</p>
               <p className="hero-quote">Ceramic coating or paint correction? <a href="/quote">Request a quote</a></p>
               <a className="hero-rating" href={googleProfileUrl} target="_blank" rel="noopener noreferrer" aria-label="Rated 5.0 out of 5 — view Camotive on Google (opens in a new tab)"><b className="google-g" aria-hidden="true">G</b><strong>5.0</strong><span aria-hidden="true">★★★★★</span><small>Google reviews</small></a></div></section>
           <ServiceStories />
