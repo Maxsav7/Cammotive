@@ -11,6 +11,11 @@ const accepted = {
     reason: "No patched release exists (latest 3.0.3). Reached only through eslint-config-next (lint) and vinext's vite-plugin-commonjs (Cloudflare build); neither runs on Vercel, and both only expand glob patterns written in this repo, not user input.",
     reviewBy: "2027-01-15",
   },
+  "GHSA-fc5q-39xc-vjpf": {
+    package: "picomatch",
+    reason: "ReDoS when matching attacker-controlled glob patterns. picomatch is only pulled in by build and lint tools (Vite, tinyglobby, eslint-config-next's fast-glob) matching our own fixed patterns at build time; nothing on the live site uses it or accepts glob patterns. No fixed release exists yet (every version up to the latest, 4.0.7, is affected).",
+    reviewBy: "2026-12-31",
+  },
   "GHSA-587h-7wmj-h5pm": {
     package: "vite (launch-editor)",
     reason: "Affects only Vite's local dev server on Windows (open-in-editor). Vite is a build tool here: Vercel builds with Next.js, and the Cloudflare build only uses Vite to compile. The fixed Vite (8.3.4+) pulls a Rolldown release that breaks vinext 1.0.1's Worker build, so it waits for a vinext upgrade.",
