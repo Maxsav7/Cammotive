@@ -118,7 +118,15 @@ p { text-wrap: pretty; }
 
 /* ---------- Header ---------- */
 .header-wrap { position: sticky; top: 0; z-index: 80; height: 76px; }
-.announcement { display: none; }
+/* First-visit offer: a slim bar above the header that scrolls away; the header stays sticky. */
+.announcement { position: relative; z-index: 81; display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 40px; padding: 8px var(--gutter); background: linear-gradient(90deg, #121117 0%, #26252e 50%, #121117 100%); border-bottom: 1px solid #ffffff14; color: #ffffffc7; font-size: 14px; font-weight: 500; text-align: center; text-decoration: none; }
+.announcement b { font-weight: 700; color: transparent; background: linear-gradient(180deg, #ffffff 0%, #d9d9e0 55%, #a9a9b4 100%); -webkit-background-clip: text; background-clip: text; }
+.announcement-cta { color: #fff; font-weight: 600; text-decoration: underline; text-decoration-color: #ffffff59; text-underline-offset: 4px; white-space: nowrap; }
+.announcement-cta i { font-style: normal; display: inline-block; transition: transform .2s; }
+.announcement:hover .announcement-cta { text-decoration-color: #fff; }
+.announcement:hover .announcement-cta i { transform: translateX(3px); }
+.announcement:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+@media (max-width: 540px) { .announcement { gap: 10px; font-size: 13px; } }
 .site-header {
   height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 28px;
   padding: 0 var(--gutter); color: #fff; background: transparent; border-bottom: 1px solid transparent;
@@ -154,9 +162,6 @@ p { text-wrap: pretty; }
   linear-gradient(90deg, #121117e6 0%, #12111799 40%, #12111700 75%),
   linear-gradient(0deg, #121117 0%, #121117cc 18%, #12111700 55%); }
 .hero-copy { width: 100%; padding: 160px var(--gutter) 88px; }
-/* First-visit offer: a plain line under the Book button, in the hero's own type. */
-.hero-offer { margin-top: 20px; font-size: 15px; line-height: 1.5; color: #ffffffb3; }
-.hero-offer strong { color: #fff; font-weight: 600; }
 .pricing-notice strong { color: var(--text); font-weight: 600; }
 .pricing-notice > a { flex: none; white-space: nowrap; }
 /* Booking flow: the first-visit offer, quiet and on-brand. */
