@@ -260,7 +260,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       await t.test("booking holds the slot and creates a $50 Stripe Checkout; nothing is sent until it's paid", async () => {
         await reset(); const response = await route.POST(request(valid())); assert.equal(response.status, 201);
         const result = await response.json();
-        assert.equal(result.total, 300, "$325 less the $25 first-visit discount"); assert.equal(result.discount, 25); assert.equal(result.deposit, 50); assert.equal(result.status, "pending");
+        assert.equal(result.total, 250, "$200 Full Detail + $75 engine bay, less the $25 first-visit discount"); assert.equal(result.discount, 25); assert.equal(result.deposit, 50); assert.equal(result.status, "pending");
         assert.match(result.confirmationCode, /^CAM-[A-F0-9]{12}$/); assert.match(result.checkoutUrl, /^https:\/\/checkout\.stripe\.com\//);
         const session = sessionFor(result.confirmationCode);
         assert.equal(session.amount_total, 5000, "deposit is fixed server-side");
@@ -294,22 +294,30 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         const fresh = () => database.prepare("DELETE FROM booking_limits").run();
         const at = (time, more) => ({ ...valid(), time, ...more });
         const first = await book();
-        assert.equal(first.discount, 25); assert.equal(first.total, 300);
+        assert.equal(first.discount, 25); assert.equal(first.total, 250);
         assert.equal(sessionFor(first.confirmationCode).amount_total, 5000, "the deposit itself isn't discounted");
-        assert.match(sessionFor(first.confirmationCode).form["line_items[0][price_data][product_data][description]"], /\$300 after your \$25 first-visit discount/);
+        assert.match(sessionFor(first.confirmationCode).form["line_items[0][price_data][product_data][description]"], /\$250 after your \$25 first-visit discount/);
         const confirmation = await sealed("%-booked");
-        assert.match(confirmation.text, /\$300 estimate after your \$25 first-visit discount\. \$50 deposit paid, about \$250 due/);
+        assert.match(confirmation.text, /\$250 estimate after your \$25 first-visit discount\. \$50 deposit paid, about \$200 due/);
         assert.match((await sealed("%-cam")).text, /after your \$25 first-visit discount/);
         assert.equal(await count("first_visit_claims"), 2, "email and phone both recorded, as keyed hashes");
         assert.ok(!JSON.stringify(await database.prepare("SELECT * FROM first_visit_claims").all()).includes("audit@example.com"));
         const sameEmail = await (await route.POST(request(at("12:00 PM", { phone: "2105550177" })))).json();
-        assert.equal(sameEmail.discount, 0); assert.equal(sameEmail.total, 325, "same email, new phone: full price");
+        assert.equal(sameEmail.discount, 0); assert.equal(sameEmail.total, 275, "same email, new phone: full price");
         await fresh();
         const samePhone = await (await route.POST(request(at("4:00 PM", { email: "Another@Example.com" })))).json();
         assert.equal(samePhone.discount, 0, "same phone, new email: full price");
         await fresh();
         const replayed = await (await route.POST(request({ ...valid(), date: future(8) }))).json();
         assert.equal(replayed.discount, 0, "a second booking by the first customer");
+        // Only a Full or Premium Detail gets it; a Maintenance Detail is full price and doesn't use it up.
+        await reset();
+        const maintenance = await (await route.POST(request({ ...valid(), packageId: "maintenance", addOnIds: [] }))).json();
+        assert.equal(maintenance.discount, 0); assert.equal(maintenance.total, 125);
+        // Premium already includes engine bay cleaning: it isn't charged again.
+        await database.prepare("DELETE FROM booking_limits").run();
+        const premium = await (await route.POST(request({ ...valid(), packageId: "premium", time: "12:00 PM", email: "premium@example.com", phone: "2105550144" }))).json();
+        assert.equal(premium.total, 325 - 25, "$325 Premium, engine bay included, less the first-visit discount"); assert.equal(premium.addOns, "");
         // A retry of the first booking's own request still reports its discount.
         await reset();
         const key = crypto.randomUUID();

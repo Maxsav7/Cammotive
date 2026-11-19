@@ -46,7 +46,9 @@ async function bookUntilCheckout(page, email, { service = "premium", addOn = tru
   await page.goto(`/book?service=${service}&size=medium`);
   await expect(page.getByRole("radio", { name: /Premium Detail|Full Detail/ }).first()).toBeVisible();
   await page.getByRole("button", { name: "Next: add-ons" }).click();
-  if (addOn) await page.getByLabel(/Engine bay cleaning/).check();
+  // Premium already includes engine bay cleaning, so it isn't offered as an add-on.
+  if (service === "premium") await expect(page.getByLabel(/Engine bay cleaning/)).toHaveCount(0);
+  if (addOn) await page.getByLabel(/Headlight restoration/).check();
   await page.getByRole("button", { name: /choose a time/ }).click();
   const day = page.locator('.calendar-days button[data-state="open"]:not(:disabled)').first();
   const dayName = (await day.getAttribute("aria-label"))?.split(":")[0];
@@ -92,7 +94,7 @@ test("book with a deposit, view in My appointments, cancel and keep the deposit"
   await expect(page.locator(".booking-done")).toContainText("$50 deposit is paid");
   const code = (await page.locator(".done-summary dd").first().textContent())?.trim();
   expect(code).toMatch(/^CAM-[A-F0-9]{12}$/);
-  await expect(page.locator(".done-summary")).toContainText("Engine bay cleaning");
+  await expect(page.locator(".done-summary")).toContainText("Headlight restoration");
   await expect(page.locator(".done-summary")).toContainText("$25 off your first visit", { useInnerText: true }); // a first booking for this email and phone
 
   // Confirmation with an invite and a link to My appointments; Cam notified; calendar event.

@@ -235,6 +235,10 @@ p { text-wrap: pretty; }
 .add-on-catalog a:hover { border-color: var(--line-strong); }
 .add-on-catalog strong { font-weight: 600; white-space: nowrap; }
 .add-on-catalog strong span { display: none; }
+.add-on-catalog a > span small { display: block; margin-top: 3px; font-size: 13px; color: var(--muted); }
+.add-on-catalog a:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.category-tabs.three { grid-template-columns: repeat(3, 1fr); }
+.price-grid.one { grid-template-columns: minmax(0, 520px); justify-content: center; }
 .menu-notes { margin-top: 22px; font-size: 14px; line-height: 1.6; color: var(--muted); max-width: 70em; }
 
 /* ---------- Process ---------- */
@@ -754,6 +758,8 @@ p { text-wrap: pretty; }
   .category-tabs strong { font-size: 16px; }
   .category-tabs small { font-size: 13px; display: block; }
   .add-on-catalog { grid-template-columns: 1fr; }
+  .category-tabs.three { grid-template-columns: 1fr; }
+  .price-grid.one { grid-template-columns: 1fr; }
   .location-grid { grid-template-columns: 1fr; }
   .faq-list summary { font-size: 17px; }
   .faq-list details p { padding-right: 0; }

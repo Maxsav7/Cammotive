@@ -79,7 +79,7 @@ test("before payment is set up, every booking step works and the last one sends 
   await page.getByLabel(/I agree to the Terms of Service/).check();
   const text = page.getByRole("link", { name: "Text us this booking" });
   const body = decodeURIComponent((await text.getAttribute("href")).split("body=")[1]);
-  for (const part of ["Full Detail, small + Engine bay cleaning", "2022 Porsche 911", "123 Main Street", "test@example.com", "Estimate: $325", "I agree to the Camotive Terms of Service"]) expect(body).toContain(part);
+  for (const part of ["Full Detail, small + Engine bay cleaning", "2022 Porsche 911", "123 Main Street", "test@example.com", "Estimate: $275", "I agree to the Camotive Terms of Service"]) expect(body).toContain(part);
   await expect(page.locator('.booking-panel a[href^="tel:"]')).toBeVisible();
   await expect(page.getByRole("button", { name: /Pay \$50/ })).toHaveCount(0);
   expect(posts, "nothing is submitted while booking is off").toEqual([]);
@@ -182,6 +182,6 @@ test("Terms of Service: linked from every footer, with the deposit and cancellat
   await expect(page.locator("h1")).toHaveText("Terms of Service.");
   await expect(page.locator(".terms-summary")).toContainText("If you cancel, the deposit is non-refundable.");
   await expect(page.locator("#cancelling")).toContainText("$50 deposit is non-refundable");
-  await expect(page.locator("#booking")).toContainText("$25 off their first online booking");
+  await expect(page.locator("#booking")).toContainText("$25 off one Full or Premium Detail");
   await expect(page.locator(".terms-section")).toHaveCount(16);
 });

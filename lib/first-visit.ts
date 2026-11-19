@@ -1,4 +1,5 @@
-// $25 off a customer's first online booking, applied automatically (no code).
+// $25 off a customer's first online booking of a Full or Premium Detail, applied
+// automatically (no code). Maintenance Details aren't discounted.
 //
 // A booking is a first visit when neither its email nor its phone number has
 //   - had a first-visit discount already (first_visit_claims, recorded when the
@@ -13,7 +14,7 @@
 // exposed on its own, so the site can't be used to look up who is a customer.
 import { db } from "./booking-store";
 import { digest, unseal } from "./booking-security";
-import { firstVisitDiscount } from "./booking-catalog";
+import { firstVisitDiscount, firstVisitPackages } from "./booking-catalog";
 import type { BookingDetails } from "./booking-emails";
 import { ACTIVE, activeParams } from "./booking-payments";
 
@@ -39,8 +40,8 @@ export async function isFirstVisit(email: string, phone: string, requestKey: str
   return !legacy;
 }
 
-export const discountFor = async (email: string, phone: string, requestKey: string) =>
-  await isFirstVisit(email, phone, requestKey) ? firstVisitDiscount : 0;
+export const discountFor = async (packageId: string, email: string, phone: string, requestKey: string) =>
+  firstVisitPackages.includes(packageId) && await isFirstVisit(email, phone, requestKey) ? firstVisitDiscount : 0;
 
 // The deposit of a discounted booking was paid: its email and phone have now used
 // the discount. Idempotent; the first booking to claim a key keeps it.

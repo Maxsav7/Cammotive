@@ -24,32 +24,34 @@ export function DetailingStories() {
   return <section className="section service-stories" aria-labelledby="detailing-stories-heading">
     <div className="section-heading"><p className="eyebrow">Choose your detail</p><h2 id="detailing-stories-heading">Three details, one standard.</h2><p>Every detail is done by hand at your home or workplace. Here&apos;s what each one covers, and what it doesn&apos;t, so you can book the right one.</p></div>
     <Story id="full-detail" eyebrow="Most booked" title="Full Detail" photo="mclaren-front" alt="Black McLaren after a full exterior detail"
-      intro="A complete interior and exterior reset for a car that's been looked after but needs a proper clean."
+      intro="A thorough interior and exterior clean, with protective wax, for a car that's regularly cared for and ready for a proper detail."
       facts={[
-        ["What's included", "Hand wash, wheels and tires; seats, carpets, mats and cargo vacuumed; interior surfaces cleaned and protected."],
+        ["What's included", "Hand wash; wheels, tires and accessible wheel wells; tire dressing, door jambs and exterior glass. Inside: seats, carpets, mats and cargo vacuumed; seats, mats, dash, console, vents, cupholders and trim cleaned; interior glass, light spot cleaning and protected surfaces."],
+        ["Protection", "A protective wax for gloss and water beading, up to 3 months."],
         ["Best for", "Regular drivers that haven't had a professional detail in a while."],
         ["Time", "About 3–4 hours at your location."],
-        ["What it won't fix", "Swirl marks, scratches, rock chips or set-in stains. Those need paint correction or a deeper clean."],
+        ["What it won't fix", "Swirl marks, scratches, rock chips or set-in stains. Those need paint enhancement, correction, or shampoo and extraction, quoted separately."],
         ["Afterwards", "A Maintenance Detail every 2–4 weeks keeps it this way."],
       ]}
       action={<a className="button" href="/book?service=full">Book a Full Detail</a>} />
     <Story id="premium-detail" eyebrow="Deep clean and protection" title="Premium Detail" photo="tundra-cabin" alt="Toyota Tundra cabin after a deep interior clean" reverse
-      intro="Everything in the Full Detail, plus the deeper work a car needs when it's been carrying real life."
+      intro="Everything in the Full Detail, plus deeper interior cleaning, paint decontamination, longer-lasting protection and engine care."
       facts={[
-        ["What's added", "Fabric shampoo or extraction, leather or Alcantara treatment, paint decontamination and a 3–6 month sealant."],
+        ["What's added", "Deeper cleaning of interior buildup, seams and crevices; targeted steam cleaning where safe for the material; leather cleaning and conditioning and gentle Alcantara care; paint decontamination (chemical treatment and clay as needed); engine bay cleaning; exterior trim conditioning."],
+        ["Protection", "A paint sealant with up to 6 months of protection, in place of the wax."],
         ["Best for", "Family cars, work trucks, pet hair, spills, or getting a car ready to sell."],
         ["Time", "A longer visit than the Full Detail. Allow most of your morning or afternoon slot."],
-        ["What it won't fix", "Paint defects and permanent damage to fabric or leather. We'll tell you honestly what's possible."],
-        ["Afterwards", "The sealant adds gloss and makes washing easier for a few months."],
+        ["What it won't fix", "Paint defects and permanent damage to fabric or leather. Shampoo and extraction, paint correction and ceramic coating are separate services."],
+        ["Afterwards", "The sealant adds gloss and makes washing easier for up to six months."],
       ]}
       action={<a className="button" href="/book?service=premium">Book a Premium Detail</a>} />
     <Story id="maintenance-detail" eyebrow="For returning clients" title="Maintenance Detail" photo="bmw-foam" alt="BMW covered in wash foam during a maintenance detail"
       intro="A lighter, regular visit that keeps a detailed car looking freshly detailed."
       facts={[
-        ["What's included", "Hand wash and wheel care, tire dressing, interior vacuum and wipe-down, interior and exterior glass."],
+        ["What's included", "Hand wash, wheels and tires, tire dressing, glass inside and out, interior vacuum and light wipe-down."],
         ["Best for", "Returning clients on a 2–4 week schedule."],
         ["Time", "A shorter visit than the Full Detail."],
-        ["What it won't fix", "Built-up grime from months without care. Start with a Full or Premium Detail."],
+        ["What it won't fix", "Built-up grime from months without care. A vehicle beyond maintenance condition is priced as a Full or Premium Detail."],
       ]}
       action={<a className="button" href="/book?service=maintenance">Book a Maintenance Detail</a>} />
   </section>;
@@ -68,7 +70,7 @@ export function DetailChooser() {
   if (complete) {
     if (answers.worry === "paint") result = { title: "Paint correction", why: "Swirls and scratches are in the paint itself, so washing won't remove them. We assess the finish and quote the right level of polishing.", href: "/quote?service=correction", cta: "Request a paint assessment" };
     else if (answers.protect === "yes") result = { title: "Ceramic coating", why: "For protection that lasts years, a coating is the right step. We quote it after seeing the paint, since preparation depends on its condition.", href: "/quote?service=ceramic", cta: "Request a coating quote" };
-    else if (answers.worry === "mess" || answers.last === "never") result = { title: "Premium Detail", why: "Stains, spills and pet hair need extraction and deeper interior work than a standard clean.", href: "/book?service=premium", cta: "Book a Premium Detail" };
+    else if (answers.worry === "mess" || answers.last === "never") result = { title: "Premium Detail", why: "Spills and pet hair need deeper interior work than a standard clean. Set-in stains may also need shampoo or extraction, which we quote separately.", href: "/book?service=premium", cta: "Book a Premium Detail" };
     else if (answers.last === "recent") result = { title: "Maintenance Detail", why: "Your car was detailed recently, so a maintenance visit is enough to bring it back.", href: "/book?service=maintenance", cta: "Book a Maintenance Detail" };
     else result = { title: "Full Detail", why: "A complete interior and exterior reset is the right starting point.", href: "/book?service=full", cta: "Book a Full Detail" };
   }
@@ -106,8 +108,8 @@ export function CoatingStory() {
       <div><h3>What it is</h3><p>A ceramic coating is a liquid applied by hand that bonds to your car&apos;s clear coat and cures into a hard, glossy layer. It becomes part of the surface rather than sitting on top like wax.</p></div>
       <div><h3>What you&apos;ll notice</h3><p>Deeper gloss, water that beads and sheds, and dirt that lets go with a gentle wash. It also helps resist UV fading and etching from bird droppings and bugs when they&apos;re cleaned off promptly.</p></div>
       <div><h3>What it won&apos;t do</h3><p>It isn&apos;t scratch-proof or chip-proof, and it locks in whatever is under it. Swirls and scratches need paint correction first, which we assess and quote separately.</p></div>
-      <div><h3>How it&apos;s applied</h3><p>A thorough wash and decontamination, panel preparation, then the coating, panel by panel. We explain the curing time and when the car can get wet.</p></div>
-      <div><h3>Options</h3><p>A 3-year coating (Nasiol ZR53) or a 5-year graphene ceramic coating with a light gloss polish. We recommend one after seeing your paint.</p></div>
+      <div><h3>How it&apos;s applied</h3><p>A prep wash and paint decontamination, a light gloss-enhancement polish as needed, panel prep, then the coating, panel by panel. It needs a covered, dry location, and the car has to stay out of water and weather while it cures; we explain how long.</p></div>
+      <div><h3>Options</h3><p>A 3-year coating (Nasiol ZR53) or a 5-year coating (Adam&apos;s Graphene Ceramic Coating Advanced). We recommend one after seeing your paint. Coatings aren&apos;t scratch-proof and need proper care.</p></div>
       <div><h3>Looking after it</h3><p>Hand wash with a pH-neutral soap and skip automatic brush washes. Regular maintenance details keep the coating performing.</p></div>
     </div>
     <div className="hero-actions"><a className="button" href="/quote?service=ceramic">Request a coating quote</a><a className="text-link" href="/our-work">See coated cars</a></div>

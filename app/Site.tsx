@@ -19,20 +19,22 @@ import { AfterYouBook, CoatingStory, CorrectionStory, DetailChooser, DetailingSt
 import { googleProfileUrl } from "../lib/links";
 import { depositDollars, firstVisitDiscount } from "../lib/booking-catalog";
 
-type PackageId = "full" | "premium" | "maintenance" | "ceramic3" | "ceramic5";
+type PackageId = "full" | "premium" | "maintenance" | "ceramic3" | "ceramic5" | "enhancement";
 type VehicleSize = "small" | "medium" | "large";
 
 const packages = {
-  full: { name: "Full Detail", prices: { small: 250, medium: 300, large: 350 }, note: "A complete interior and exterior reset for normally maintained vehicles. About 3–4 hours.",
-    features: ["Hand wash, wheels and tires", "Vacuum seats, carpets, mats and cargo", "Interior surfaces cleaned and protected", "No added paint sealant"] },
-  premium: { name: "Premium Detail", prices: { small: 350, medium: 425, large: 500 }, note: "A deeper clean with added paint protection for vehicles needing more care.",
-    features: ["Everything in Full Detail", "Fabric shampoo or extraction", "Leather or Alcantara treatment", "Decontamination + 3–6 month sealant"] },
-  maintenance: { name: "Maintenance Detail", prices: { small: 125, medium: 150, large: 175 }, note: "For returning clients serviced every 2–4 weeks.",
-    features: ["Hand wash and wheel care", "Tire dressing", "Interior vacuum and wipe-down", "Interior and exterior glass"] },
-  ceramic3: { name: "3-Year Ceramic Coating", prices: { small: 900, medium: 1050, large: 1200 }, note: "Nasiol ZR53 for gloss, easier maintenance, and up to three years of protection.",
-    features: ["Prep wash + decontamination", "Panel preparation", "Nasiol ZR53 application", "Paint correction quoted separately"] },
-  ceramic5: { name: "5-Year Ceramic Coating", prices: { small: 1300, medium: 1500, large: 1700 }, note: "Graphene ceramic protection with a light gloss polish for added clarity.",
-    features: ["Prep wash + decontamination", "Light gloss polish", "Panel preparation", "Paint correction quoted separately"] },
+  full: { name: "Full Detail", prices: { small: 200, medium: 250, large: 300 }, note: "A thorough interior and exterior clean with paint protection for regularly cared-for vehicles.",
+    features: ["Hand wash, wheels, tires and accessible wheel wells", "Tire dressing, door jambs and exterior glass", "Vacuum seats, carpets, mats and cargo area", "Seats, mats, dash, console, vents and trim cleaned", "Interior glass and light spot cleaning", "Interior surfaces protected", "Protective wax, up to 3 months"] },
+  premium: { name: "Premium Detail", prices: { small: 325, medium: 375, large: 425 }, note: "Deeper interior cleaning, paint decontamination, longer-lasting protection and engine care.",
+    features: ["Everything in Full Detail", "Deeper cleaning of buildup, seams and crevices", "Targeted steam cleaning, where safe", "Leather conditioning; gentle Alcantara care", "Paint decontamination: chemical and clay", "Paint sealant, up to 6 months (replaces wax)", "Engine bay cleaning", "Exterior trim conditioning"] },
+  maintenance: { name: "Maintenance Detail", prices: { small: 125, medium: 150, large: 175 }, note: "For returning clients every 2–4 weeks after a Full or Premium Detail.",
+    features: ["Hand wash, wheels and tires", "Tire dressing", "Glass inside and out", "Interior vacuum and light wipe-down", "Vehicles beyond maintenance condition are priced as a Full or Premium Detail"] },
+  ceramic3: { name: "3-Year Ceramic Coating", prices: { small: 750, medium: 900, large: 1050 }, note: "Nasiol ZR53 for gloss, easier maintenance and protection designed to last up to three years with proper care.",
+    features: ["Prep wash and paint decontamination", "Light gloss-enhancement polish as needed", "Panel prep", "Nasiol ZR53 coating application", "Additional paint correction quoted separately"] },
+  ceramic5: { name: "5-Year Ceramic Coating", prices: { small: 1000, medium: 1150, large: 1300 }, note: "Adam's Graphene Ceramic Coating Advanced, with a light gloss-enhancement polish as needed for added clarity.",
+    features: ["Prep wash and paint decontamination", "Light gloss-enhancement polish as needed", "Panel prep", "Adam's Advanced coating application", "Additional paint correction quoted separately"] },
+  enhancement: { name: "Gloss Polish", prices: { small: 300, medium: 350, large: 400 }, note: "A one-stage machine polish that brings back shine, deepens the paint's look and improves clarity. Includes an exterior detail.",
+    features: ["Exterior prep wash, wheels, tires and exterior glass", "Paint decontamination: chemical and clay as needed", "Light one-stage polish for gloss and clarity", "Panel prep", "Paint sealant, up to 6 months"] },
 } as const;
 
 const addOns = {
@@ -41,6 +43,12 @@ const addOns = {
   headlight: ["Headlight restoration (pair)", 100],
   engine: ["Engine bay cleaning", 75],
 } as const;
+type Category = "detailing" | "enhancement" | "ceramic";
+const categories: [Category, string, string, PackageId[]][] = [
+  ["detailing", "Detailing", "Book online", ["full", "premium", "maintenance"]],
+  ["enhancement", "Paint Enhancement", "By quote", ["enhancement"]],
+  ["ceramic", "Ceramic Coating", "By quote", ["ceramic3", "ceramic5"]],
+];
 
 const quotePages = ["ceramic-coating", "paint-correction", "quote"];
 
@@ -48,7 +56,7 @@ export default function Site({ page = "home" }: { page?: string }) {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [menu, setMenu] = useState<"services" | null>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [category, setCategory] = useState<"detailing" | "ceramic">(page === "ceramic-coating" ? "ceramic" : "detailing");
+  const [category, setCategory] = useState<Category>(page === "ceramic-coating" ? "ceramic" : page === "paint-correction" ? "enhancement" : "detailing");
   const [scrolled, setScrolled] = useState(false);
   const [vehicleSize, setVehicleSize] = useState<VehicleSize>("small");
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -109,25 +117,29 @@ export default function Site({ page = "home" }: { page?: string }) {
 
   const pricing = <section className="section pricing-section" id="pricing">
     <div className="section-heading"><p className="eyebrow">Pricing</p><h2>Clear prices, before you book.</h2><p>Choose your vehicle size to see starting prices. We confirm the final price before work begins.</p></div>
-    <div className="pricing-notice"><span>Mobile service anywhere in San Antonio. A ${depositDollars} deposit, paid when you book, confirms your time and goes toward your total. New customers get <strong>${firstVisitDiscount} off their first detail</strong>, taken off automatically when booking.</span> <a href="/book">Book a detail</a></div>
-    <div className="pricing-step"><span>1</span><div><h3>Choose a service</h3><p>Detailing is booked online. Coatings are quoted first.</p></div></div>
-    <div className="category-tabs" role="tablist" aria-label="Service category">
-      <button id="detail-tab" role="tab" aria-selected={category === "detailing"} aria-controls="packages-panel" tabIndex={category === "detailing" ? 0 : -1} onKeyDown={e => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setCategory("ceramic"); document.getElementById("ceramic-tab")?.focus(); } }} className={category === "detailing" ? "selected" : ""} onClick={() => setCategory("detailing")}><strong>Detailing</strong><small>Book online</small></button>
-      <button id="ceramic-tab" role="tab" aria-selected={category === "ceramic"} aria-controls="packages-panel" tabIndex={category === "ceramic" ? 0 : -1} onKeyDown={e => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setCategory("detailing"); document.getElementById("detail-tab")?.focus(); } }} className={category === "ceramic" ? "selected" : ""} onClick={() => setCategory("ceramic")}><strong>Ceramic Coating</strong><small>By quote</small></button>
+    <div className="pricing-notice"><span>Mobile service anywhere in San Antonio. A ${depositDollars} deposit, paid when you book, confirms your time and goes toward your total. First-time clients get <strong>${firstVisitDiscount} off a Full or Premium Detail</strong>, taken off automatically when booking.</span> <a href="/book">Book a detail</a></div>
+    <div className="pricing-step"><span>1</span><div><h3>Choose a service</h3><p>Detailing is booked online. Paint enhancement and coatings are quoted first.</p></div></div>
+    <div className="category-tabs three" role="tablist" aria-label="Service category">
+      {categories.map(([id, label, how], i) => <button key={id} id={`${id}-tab`} role="tab" aria-selected={category === id} aria-controls="packages-panel" tabIndex={category === id ? 0 : -1}
+        onKeyDown={e => { if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return; e.preventDefault(); const next = categories[(i + (e.key === "ArrowRight" ? 1 : categories.length - 1)) % categories.length][0]; setCategory(next); document.getElementById(`${next}-tab`)?.focus(); }}
+        className={category === id ? "selected" : ""} onClick={() => setCategory(id)}><strong>{label}</strong><small>{how}</small></button>)}
     </div>
-    <div className="pricing-step"><span>2</span><div><h3>Compare packages</h3><p>Starting prices for your vehicle size.</p></div><label className="price-size">Vehicle size<select value={vehicleSize} onChange={e => setVehicleSize(e.target.value as VehicleSize)}><option value="small">Small: coupe or sedan</option><option value="medium">Medium: crossover or small truck</option><option value="large">Large: SUV or full-size truck</option></select></label></div>
-    <div id="packages-panel" role="tabpanel" aria-labelledby={category === "detailing" ? "detail-tab" : "ceramic-tab"} className={`price-grid ${category === "ceramic" ? "two" : ""}`}>
-      {(category === "detailing" ? ["full", "premium", "maintenance"] : ["ceramic3", "ceramic5"]).map(key => {
-        const id = key as PackageId; const item = packages[id]; const quoted = id.startsWith("ceramic");
-        return <TiltCard className={`price-card ${id === "premium" ? "highlight" : ""}`} key={id}>{id === "premium" && <span className="popular">Deep clean + protection</span>}<h3>{item.name}</h3><p>{item.note}</p>
-          <div className="price"><small>From</small><strong>${item.prices[vehicleSize]}</strong></div><ul>{item.features.map(f => <li key={f}><span>✓</span>{f}</li>)}</ul>
-          {quoted ? <a className="button" href="/quote?service=ceramic">Request a quote</a> : <a className="button" href={`/book?service=${id}&size=${vehicleSize}`}>Book this detail</a>}
+    <div className="pricing-step"><span>2</span><div><h3>Compare packages</h3><p>Starting prices for your vehicle size.</p></div><label className="price-size">Vehicle size<select value={vehicleSize} onChange={e => setVehicleSize(e.target.value as VehicleSize)}><option value="small">Small: coupe or sedan</option><option value="medium">Medium: crossover, small SUV or small truck</option><option value="large">Large: full-size truck, large SUV or 3-row SUV</option></select></label></div>
+    <div id="packages-panel" role="tabpanel" aria-labelledby={`${category}-tab`} className={`price-grid ${category === "ceramic" ? "two" : category === "enhancement" ? "one" : ""}`}>
+      {categories.find(([id]) => id === category)![3].map(id => {
+        const item = packages[id]; const quoted = category !== "detailing";
+        return <TiltCard className={`price-card ${id === "premium" ? "highlight" : ""}`} key={id}>{id === "premium" && <span className="popular">Deep clean + protection</span>}{id === "enhancement" && <span className="popular">One-stage enhancement</span>}<h3>{item.name}</h3><p>{item.note}</p>
+          <div className="price"><small>From</small><strong>${item.prices[vehicleSize].toLocaleString("en-US")}</strong></div><ul>{item.features.map(f => <li key={f}><span>✓</span>{f}</li>)}</ul>
+          {quoted ? <a className="button" href={`/quote?service=${category}`}>Request a quote</a> : <a className="button" href={`/book?service=${id}&size=${vehicleSize}`}>Book this detail</a>}
           <a className="price-phone" href="tel:+12105730671">(210) 573-0671</a></TiltCard>;
       })}
     </div>
+    {category === "enhancement" && <p className="menu-notes">Also available as an upgrade to a Full or Premium Detail, quoted separately to account for prep already included. This service is about appearance: paint correction and defect removal aren&apos;t included, and interior detailing and ceramic coating are separate.</p>}
+    {category === "ceramic" && <p className="menu-notes">Paint correction is quoted separately. A covered, dry location is needed, and the vehicle must stay out of water and weather during the cure time. Ceramic coatings aren&apos;t scratch-proof and need proper care.</p>}
     <div className="pricing-step"><span>3</span><div><h3>Add what you need</h3><p>Optional upgrades, chosen while booking.</p></div></div>
-    <div className="add-on-catalog">{Object.entries(addOns).map(([id, [name, price]]) => <a key={id} href={`/book?addon=${id}`}><span>{name}</span><strong>${price}</strong></a>)}</div>
-    <p className="menu-notes">Excessive pet hair or sand removal starts at $50. Severe stains, smoke, urine, mildew and unusually neglected vehicles are quoted separately.</p>
+    <div className="add-on-catalog">{Object.entries(addOns).map(([id, [name, price]]) => <a key={id} href={`/book?addon=${id}`}><span>{name}{id === "engine" && <small>Included in Premium</small>}</span><strong>${price}{id === "engine" ? "+" : ""}</strong></a>)}
+      <a href="/quote?service=extraction"><span>Shampoo &amp; extraction<small>Separate from Full and Premium</small></span><strong>By quote</strong></a></div>
+    <p className="menu-notes">Glass coatings use Gtechniq G1 ClearVision. Normal vacuuming and everyday debris are included. Excessive pet hair or sand removal starts at $50. Severe stains, smoke, urine, mildew and unusually neglected vehicles need an assessment and may be quoted separately; stain and odor results depend on the condition. Prices start at the amounts shown and vary by size and condition; protection longevity varies with use, weather and maintenance.</p>
   </section>;
 
   const faq = <section className="faq section" id="faq">
@@ -148,7 +160,7 @@ export default function Site({ page = "home" }: { page?: string }) {
   return (
     <main className={`site-shell ${isHome ? "home-page" : "inner-page"}`} data-theme={theme}>
       <a className="skip-link" href="#main-content">Skip to content</a>
-      {page !== "book" && <a className="announcement" href="/book"><span>New customers get <b>${firstVisitDiscount} off</b> their first detail</span><span className="announcement-cta">Book now <i aria-hidden="true">→</i></span></a>}
+      {page !== "book" && <a className="announcement" href="/book"><span>First-time clients get <b>${firstVisitDiscount} off</b> a Full or Premium Detail</span><span className="announcement-cta">Book now <i aria-hidden="true">→</i></span></a>}
       <div className="header-wrap">
         <header className={`site-header ${scrolled || !isHome || mobileMenu ? "solid" : ""}`}>
           <a className="brand" href="/" aria-label="Camotive Detailing home"><Logo /></a>

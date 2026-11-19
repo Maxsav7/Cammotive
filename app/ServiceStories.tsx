@@ -18,7 +18,7 @@ const services = [
   },
   {
     id: "interior", eyebrow: "Interior detailing", title: "A cabin that feels new again.",
-    text: "Seats, carpets, mats, vents and touch points are vacuumed, cleaned and protected. For stains, spills or pet hair, the Premium Detail adds shampoo or extraction and leather care.",
+    text: "Seats, carpets, mats, vents and touch points are vacuumed, cleaned and protected. The Premium Detail adds deeper cleaning, targeted steam and leather care; shampoo and extraction are quoted separately.",
     photo: "mclaren-interior", alt: "McLaren red leather and Alcantara interior after detailing",
     action: <Link className="button" href="/book?service=premium">Book a Premium Detail</Link>,
   },

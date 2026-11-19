@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     // $25 off a first visit. Decided here, on the server, and never reported on its
     // own, so the booking form can't be used to check whether someone is a customer.
     const base = estimate(parsed.data);
-    const discount = await discountFor(details.email, details.phone, requestKey);
+    const discount = await discountFor(details.packageId, details.email, details.phone, requestKey);
     const calculated = { ...base, total: base.total - discount, discount };
     const previous = await replay(requestKey, fingerprint, calculated);
     if (previous) return previous;
