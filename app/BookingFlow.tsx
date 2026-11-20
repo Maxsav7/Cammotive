@@ -4,6 +4,7 @@
 // Checkout page. Payment confirms the booking; customers come back here to see it.
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
+import ContactFields, { contactProblems, firstProblem, type ContactField, type ContactNote, type Touched } from "./ContactFields";
 import { TERMS_VERSION } from "../lib/terms";
 import { prices, extras, includedAddOns, firstVisitPackages, bookingTimes, depositDollars, firstVisitDiscount, holdMinutes, slotLabel, slotPart } from "../lib/booking-catalog";
 
@@ -106,6 +107,8 @@ export default function BookingFlow() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState<Slot | "">("");
   const [contact, setContact] = useState({ name: "", phone: "", email: "", vehicle: "", address: "" });
+  const [touched, setTouched] = useState<Touched>({});
+  const [contactNote, setContactNote] = useState<ContactNote>(null);
   const [agreed, setAgreed] = useState(false);
   const [firstTime, setFirstTime] = useState(false); // text-mode only: the customer says so; online it's checked automatically
   const [botToken, setBotToken] = useState("");
@@ -199,6 +202,12 @@ export default function BookingFlow() {
       }
       if (started) { forget(); setDone({ code: result.confirmationCode, status: "confirmed", date, time, packageName: result.packageName, addOns: result.addOns, total: result.total, discount: result.discount, deposit: result.deposit }); }
       else if (response.status === 409 && /taken|released/.test(result.error ?? "")) { submission.current = { signature: "", key: "" }; setTime(""); go(3); setError(result.error); }
+      // A problem with the email or phone (an email domain that takes no email): back to that field.
+      else if (result.field === "email" || result.field === "phone") {
+        const field: ContactField = result.field;
+        setContactNote({ field, message: result.error }); setTouched(t => ({ ...t, [field]: true })); go(4);
+        requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`booking-${field}`)?.focus()));
+      }
       else {
         if (response.status === 409) submission.current = { signature: "", key: "" };
         setError(result.error || `We couldn't start the payment. Please call or text ${PHONE}.`);
@@ -282,13 +291,16 @@ export default function BookingFlow() {
         <button type="button" className="button" disabled={!date || !time} onClick={() => go(4)}>Next: your details</button></div>
     </div>}
 
-    {step === 4 && <form className="booking-panel" onSubmit={e => { e.preventDefault(); if (detailsComplete) go(5); }}>
+    {step === 4 && <form className="booking-panel" onSubmit={e => {
+      e.preventDefault();
+      if (!firstProblem("booking", contactProblems(contact.phone, contact.email, contactNote), setTouched) && detailsComplete) go(5);
+    }}>
       <button type="button" className="back" onClick={() => go(3)}>Back</button>
       <h3 tabIndex={-1}>Where is the car?</h3>
       <div className="form-grid">
         <label>Full name<input name="name" autoComplete="name" required minLength={2} maxLength={100} value={contact.name} onChange={e => setContact({ ...contact, name: e.target.value })} /></label>
-        <label>Mobile number<input name="phone" type="tel" autoComplete="tel" required value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} placeholder="(210) 555-0123" /></label>
-        <label>Email<input name="email" type="email" autoComplete="email" required maxLength={254} value={contact.email} onChange={e => setContact({ ...contact, email: e.target.value })} /></label>
+        <ContactFields prefix="booking" phone={contact.phone} email={contact.email} onChange={(field, value) => setContact(c => ({ ...c, [field]: value }))}
+          touched={touched} onTouch={field => setTouched(t => ({ ...t, [field]: true }))} note={contactNote} clearNote={() => setContactNote(null)} />
         <label>Vehicle<input name="vehicle" required minLength={3} maxLength={120} value={contact.vehicle} onChange={e => setContact({ ...contact, vehicle: e.target.value })} placeholder="Year, make and model" /></label>
         <label className="wide">Service address<input name="address" autoComplete="street-address" required minLength={8} maxLength={250} value={contact.address} onChange={e => setContact({ ...contact, address: e.target.value })} placeholder="Street address, San Antonio, TX" /></label>
       </div>

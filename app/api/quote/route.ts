@@ -1,4 +1,5 @@
-import { quoteSchema } from "@/lib/booking-validation";
+import { contactError, quoteSchema } from "@/lib/booking-validation";
+import { checkEmailDomain } from "@/lib/email-domain";
 import { quoteServices } from "@/lib/booking-catalog";
 import { db, limit, limitRequest, requireBooking } from "@/lib/booking-store";
 import { failure, HttpError, json, readJson, seal, token, verifyBot } from "@/lib/booking-security";
@@ -13,9 +14,10 @@ export async function POST(request: Request) {
     requireBooking();
     await limitRequest(request, "quote", 5);
     const parsed = quoteSchema.safeParse(await readJson(request));
-    if (!parsed.success) throw new HttpError(400, "Please check your vehicle and contact details.");
+    if (!parsed.success) throw contactError(parsed.error) ?? new HttpError(400, "Please check your vehicle and contact details.");
     const { turnstileToken, ...quote } = parsed.data;
     await verifyBot(turnstileToken, "quote");
+    await checkEmailDomain(quote.email);
     // Each request emails two people, and all share one daily budget: no single
     // address can use up more than a third of it.
     await limitRequest(request, "quote-day", 10, 86400);

@@ -1,4 +1,5 @@
-import { bookingSchema, estimate } from "@/lib/booking-validation";
+import { bookingSchema, contactError, estimate } from "@/lib/booking-validation";
+import { checkEmailDomain } from "@/lib/email-domain";
 import { db, requireBooking, limitRequest, limit } from "@/lib/booking-store";
 import { configuredOrigin, digest, failure, HttpError, json, readJson, seal, token } from "@/lib/booking-security";
 import { verifyBot } from "@/lib/booking-security";
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     requireBooking();
     await limitRequest(request, "create", 10);
     const parsed = bookingSchema.safeParse(await readJson(request));
-    if (!parsed.success) throw new HttpError(400, "Please check your service, date and contact details.");
+    if (!parsed.success) throw contactError(parsed.error) ?? new HttpError(400, "Please check your service, date and contact details.");
     const requestKey = request.headers.get("idempotency-key");
     if (!requestKey || !/^[a-f0-9-]{36}$/i.test(requestKey)) throw new HttpError(400, "A valid request key is required.");
     const { turnstileToken, acceptedTerms, ...details } = parsed.data;
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
     // Everything after this reads the database several times, so it's only done
     // for a request that passed the bot check.
     await verifyBot(turnstileToken, "booking");
+    await checkEmailDomain(details.email);
     await limitRequest(request, "create-day", 8, 86400);
     const calculated = await price();
     const { discount } = calculated;

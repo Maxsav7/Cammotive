@@ -44,11 +44,30 @@ test("migrations apply cleanly over the legacy hand-written schema", async t => 
     package_id TEXT NOT NULL, package_name TEXT NOT NULL, add_ons TEXT, date TEXT NOT NULL, time TEXT NOT NULL, total INTEGER NOT NULL,
     name TEXT NOT NULL, email TEXT NOT NULL, phone TEXT NOT NULL, vehicle TEXT NOT NULL, address TEXT NOT NULL, reminder TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`).run();
-  await database.prepare("INSERT INTO appointments (confirmation_code, package_id, package_name, date, time, total, name, email, phone, vehicle, address, reminder) VALUES ('CAM-1', 'full', 'Full', '2030-01-01', '8:00 AM', 250, 'Legacy', 'x@example.com', '2105550123', 'Car', 'Addr', 'none')").run();
+  await database.prepare("INSERT INTO appointments (confirmation_code, package_id, package_name, date, time, total, name, email, phone, vehicle, address, reminder) VALUES ('CAM-1', 'full', 'Full', '2030-01-01', '8:00 AM', 250, 'Legacy', 'x@example.com', '2103930123', 'Car', 'Addr', 'none')").run();
   for (const sql of migrationStatements()) await database.prepare(sql).run();
   const tables = (await database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()).results.map(r => r.name);
   for (const table of ["appointments", "secure_bookings", "booking_limits", "booking_outbox"]) assert.ok(tables.includes(table), table);
   assert.equal(Number((await database.prepare("SELECT count(*) AS n FROM appointments").first()).n), 1);
+});
+
+test("phone and email checks catch mistakes and obvious fakes", () => {
+  const { phoneProblem, emailProblem, emailSuggestion } = loader({})(resolve(root, "lib/contact-checks.ts"));
+  for (const ok of ["2103931934", "(210) 393-1934", "+1 210 393 1934", "1-210-393-1934", "210.393.1934", "726 200 4455"]) assert.equal(phoneProblem(ok), null, ok);
+  const phone = {
+    "210393193": /10-digit/, "21039319345": /10-digit/, "": /10-digit/, "abc2103931934": /digits/,
+    "2105550123": /555/, "8002345678": /toll-free/, "8882345678": /toll-free/, "9002345678": /toll-free/,
+    "1103931934": /area code/, "2113931934": /area code/, "2903931934": /area code/, "3703931934": /area code/,
+    "2101231934": /real US/, "2109111234": /real US/, "2222222222": /real US/,
+  };
+  for (const [input, problem] of Object.entries(phone)) assert.match(phoneProblem(input) ?? "", problem, input || "(empty)");
+  for (const ok of ["jim@gmail.com", "Jim.Smith+cars@Example.co.uk", "cam@camotivedetailing.com"]) assert.equal(emailProblem(ok), null, ok);
+  for (const bad of ["", "jim", "jim@gmail", "jim@@gmail.com", "jim gmail.com", "jim@gmail..com", "@gmail.com", "jim@-gmail.com", "jim@gmail.c", `${"a".repeat(250)}@x.com`])
+    assert.ok(emailProblem(bad), bad || "(empty)");
+  const suggestions = { "jim@gmial.com": "jim@gmail.com", "jim@gmail.con": "jim@gmail.com", "Jim@GNAIL.com": "Jim@gmail.com", "jim@yaho.com": "jim@yahoo.com",
+    "jim@hotmal.com": "jim@hotmail.com", "jim@outlok.com": "jim@outlook.com", "jim@icloud.co": "jim@icloud.com", "jim@company.con": "jim@company.com" };
+  for (const [typed, fixed] of Object.entries(suggestions)) assert.equal(emailSuggestion(typed), fixed, typed);
+  for (const fine of ["jim@gmail.com", "jim@mail.com", "jim@gmx.com", "jim@camotivedetailing.com", "jim@me.com", "jim"]) assert.equal(emailSuggestion(fine), null, fine);
 });
 
 test("no code trusts identity headers that a client or proxy could set", () => {
@@ -117,7 +136,18 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
     const pemLabel = edge => `-----${edge} PRIVATE` + " KEY-----";
     const googlePem = `${pemLabel("BEGIN")}\\n${Buffer.from(await crypto.subtle.exportKey("pkcs8", googleKeys.privateKey)).toString("base64").match(/.{1,64}/g).join("\\n")}\\n${pemLabel("END")}\\n`;
     const dbWorker = runtime === "vercel-worker" ? loader({})(resolve(root, "db-worker/index.ts")).default : null;
+    // Email domains, as Cloudflare's DNS answers: nomail.example doesn't exist, nullmx.example
+    // says it takes no email (RFC 7505), dnsdown.example can't be looked up; the rest have mail.
+    const dnsLookups = [];
     globalThis.fetch = async (url, options) => {
+      if (String(url).startsWith("https://cloudflare-dns.com/dns-query")) {
+        const query = new URL(String(url)), name = query.searchParams.get("name"), type = query.searchParams.get("type");
+        dnsLookups.push(`${name} ${type}`);
+        if (name === "dnsdown.example") throw new TypeError("fetch failed");
+        if (name === "nomail.example") return Response.json({ Status: 3, Answer: [] });
+        if (name === "nullmx.example") return Response.json({ Status: 0, Answer: [{ name, type: 15, data: "0 ." }] });
+        return Response.json({ Status: 0, Answer: type === "MX" ? [{ name, type: 15, data: `10 mx.${name}.` }] : [] });
+      }
       if (dbWorker && String(url).startsWith("https://camotive-db.example.workers.dev/")) {
         if (dbFailure) return Response.json({ success: false }, { status: 503 });
         assert.equal(options.cache, "no-store");
@@ -227,7 +257,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
       body: JSON.stringify({ code, action }) }));
     const slots = async (from, days = 3) => (await (await availability.GET(new Request(`https://booking.example.com/api/availability?from=${from}&days=${days}`))).json());
     const future = offset => new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
-    const valid = () => ({ packageId: "full", vehicleSize: "small", addOnIds: ["engine"], date: future(7), time: "8:00 AM", name: "Audit Customer", email: "audit@example.com", phone: "2105550123", vehicle: "2024 Test Sedan", address: "100 Synthetic Street", acceptedTerms: termsVersion, turnstileToken: "valid-booking" });
+    const valid = () => ({ packageId: "full", vehicleSize: "small", addOnIds: ["engine"], date: future(7), time: "8:00 AM", name: "Audit Customer", email: "audit@example.com", phone: "2103930123", vehicle: "2024 Test Sedan", address: "100 Synthetic Street", acceptedTerms: termsVersion, turnstileToken: "valid-booking" });
     const request = (data, key = crypto.randomUUID(), headers = {}) => new Request("https://booking.example.com/api/appointments", {
       method: "POST", headers: { origin: "https://booking.example.com", "content-type": "application/json", "idempotency-key": key, ...headers }, body: JSON.stringify(data),
     });
@@ -353,7 +383,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         assert.match((await sealed("%-cam")).text, /after your \$25 first-visit discount/);
         assert.equal(await count("first_visit_claims"), 2, "email and phone both recorded, as keyed hashes");
         assert.ok(!JSON.stringify(await database.prepare("SELECT * FROM first_visit_claims").all()).includes("audit@example.com"));
-        const sameEmail = await (await route.POST(request(at("12:00 PM", { phone: "2105550177" })))).json();
+        const sameEmail = await (await route.POST(request(at("12:00 PM", { phone: "2103930177" })))).json();
         assert.equal(sameEmail.discount, 0); assert.equal(sameEmail.total, 275, "same email, new phone: full price");
         await fresh();
         const samePhone = await (await route.POST(request(at("4:00 PM", { email: "Another@Example.com" })))).json();
@@ -367,7 +397,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         assert.equal(maintenance.discount, 0); assert.equal(maintenance.total, 125);
         // Premium already includes engine bay cleaning: it isn't charged again.
         await database.prepare("DELETE FROM booking_limits").run(); store.fullLimits.clear();
-        const premium = await (await route.POST(request({ ...valid(), packageId: "premium", time: "12:00 PM", email: "premium@example.com", phone: "2105550144" }))).json();
+        const premium = await (await route.POST(request({ ...valid(), packageId: "premium", time: "12:00 PM", email: "premium@example.com", phone: "2103930144" }))).json();
         assert.equal(premium.total, 325 - 25, "$325 Premium, engine bay included, less the first-visit discount"); assert.equal(premium.addOns, "");
         // A retry of the first booking's own request still reports its discount.
         await reset();
@@ -388,9 +418,9 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         // Customers from the original booking form are past customers.
         await reset();
         await database.prepare(`INSERT INTO appointments (confirmation_code, package_id, package_name, date, time, total, name, email, phone, vehicle, address, reminder)
-          VALUES ('OLD-1', 'full', 'Full Detail', '2025-01-01', '8:00 AM', 250, 'Old', 'Old@Example.com ', '(210) 555-0199', 'Car', 'Somewhere 1', 'none')`).run();
-        assert.equal((await (await route.POST(request(at("8:00 AM", { email: "old@example.com", phone: "2105550150" })))).json()).discount, 0, "legacy email");
-        assert.equal((await (await route.POST(request(at("12:00 PM", { email: "new@example.com", phone: "2105550199" })))).json()).discount, 0, "legacy phone, any format");
+          VALUES ('OLD-1', 'full', 'Full Detail', '2025-01-01', '8:00 AM', 250, 'Old', 'Old@Example.com ', '(210) 393-0199', 'Car', 'Somewhere 1', 'none')`).run();
+        assert.equal((await (await route.POST(request(at("8:00 AM", { email: "old@example.com", phone: "2103930150" })))).json()).discount, 0, "legacy email");
+        assert.equal((await (await route.POST(request(at("12:00 PM", { email: "new@example.com", phone: "2103930199" })))).json()).discount, 0, "legacy phone, any format");
         // If Camotive cancels and refunds, the discount wasn't used: they get it on rebooking.
         await reset();
         await book();
@@ -425,11 +455,11 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
       await t.test("an expired or abandoned checkout releases the slot", async () => {
         await reset();
         const first = await (await route.POST(request(valid()))).json();
-        assert.equal((await route.POST(request({ ...valid(), email: "other@example.com", phone: "2105550129" }))).status, 409, "held");
+        assert.equal((await route.POST(request({ ...valid(), email: "other@example.com", phone: "2103930129" }))).status, 409, "held");
         const expired = { ...sessionFor(first.confirmationCode), status: "expired" };
         assert.equal((await webhook.POST(await signed({ type: "checkout.session.expired", data: { object: expired } }))).status, 200);
         assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"]);
-        const second = await (await route.POST(request({ ...valid(), email: "other@example.com", phone: "2105550129" }))).json();
+        const second = await (await route.POST(request({ ...valid(), email: "other@example.com", phone: "2103930129" }))).json();
         assert.equal(second.status, "pending");
         // "Back" from Stripe: only with the release token from the cancel URL.
         const release = new URL(sessionFor(second.confirmationCode).form.cancel_url).searchParams.get("release");
@@ -438,7 +468,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         assert.equal(sessionFor(second.confirmationCode).status, "expired", "the checkout can't be paid afterwards");
         assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"]);
         // A hold that simply runs out frees the slot too, and maintenance tidies it up.
-        const third = await (await route.POST(request({ ...valid(), email: "third@example.com", phone: "2105550130" }))).json();
+        const third = await (await route.POST(request({ ...valid(), email: "third@example.com", phone: "2103930130" }))).json();
         await database.prepare("UPDATE booking_payments SET hold_expires = 0 WHERE code = ?").bind(third.confirmationCode).run();
         await database.prepare("UPDATE secure_bookings SET created_at = created_at - 600 WHERE code = ?").bind(third.confirmationCode).run();
         assert.deepEqual((await slots(valid().date, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"]);
@@ -450,7 +480,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         const late = await (await route.POST(request(valid()))).json();
         await database.prepare("UPDATE booking_payments SET hold_expires = 0").run();
         await database.prepare("UPDATE secure_bookings SET created_at = created_at - 600").run();
-        await book({ ...valid(), email: "quick@example.com", phone: "2105550131" });
+        await book({ ...valid(), email: "quick@example.com", phone: "2103930131" });
         await pay(late.confirmationCode);
         assert.equal((await database.prepare("SELECT status FROM secure_bookings WHERE code = ?").bind(late.confirmationCode).first()).status, "refunded");
         assert.equal(refunds.length, 1); assert.equal(refunds[0].payment_intent, `pi_test_${late.confirmationCode.slice(4)}`);
@@ -475,12 +505,12 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         assert.equal(results[0].confirmationCode, results[1].confirmationCode); assert.equal(results[0].checkoutUrl, results[1].checkoutUrl, "a retry gets the same payment page");
         assert.equal(await count("secure_bookings"), 1); assert.equal(stripeSessions.size, 1);
         assert.equal((await route.POST(request({ ...data, vehicle: "Different car" }, key))).status, 409);
-        assert.equal((await route.POST(request({ ...data, email: "second@example.com", phone: "2105550124" }))).status, 409, "same slot is held");
-        assert.equal((await route.POST(request({ ...data, time: "12:00 PM", email: "second@example.com", phone: "2105550124" }))).status, 201, "second slot that day is open");
+        assert.equal((await route.POST(request({ ...data, email: "second@example.com", phone: "2103930124" }))).status, 409, "same slot is held");
+        assert.equal((await route.POST(request({ ...data, time: "12:00 PM", email: "second@example.com", phone: "2103930124" }))).status, 201, "second slot that day is open");
         await pay(results[0].confirmationCode);
         assert.equal((await (await route.POST(request(data, key))).json()).status, "confirmed", "a retry after paying reports the booking");
         await database.prepare("DELETE FROM booking_limits").run(); store.fullLimits.clear(); // fresh per-visitor allowance for the race
-        const racing = await Promise.all([3, 4].map(n => route.POST(request({ ...data, date: chicagoDay(9), email: `race${n}@example.com`, phone: `210555012${n}` }))));
+        const racing = await Promise.all([3, 4].map(n => route.POST(request({ ...data, date: chicagoDay(9), email: `race${n}@example.com`, phone: `210393012${n}` }))));
         assert.deepEqual(racing.map(r => r.status).sort(), [201, 409], "two people racing for one slot: exactly one wins");
       });
       await t.test("if Stripe is down, the hold is released and nothing is booked", async () => {
@@ -508,7 +538,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         const cancelled = await sealed("%-cancelled");
         assert.match(cancelled.subject, /^Cancelled/); assert.match(cancelled.text, /refunded/);
         assert.match(Buffer.from(cancelled.attachments[0].content, "base64").toString(), /METHOD:CANCEL[\s\S]*UID:CAM-[A-F0-9]{12}@camotive[\s\S]*SEQUENCE:1/);
-        await book({ ...valid(), email: "next@example.com", phone: "2105550125" });
+        await book({ ...valid(), email: "next@example.com", phone: "2103930125" });
       });
       await t.test("if the refund fails, Cam's cancel fails and the booking stays", async () => {
         await reset(); await book();
@@ -540,8 +570,8 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
       await t.test("My appointments: emailed code, uniform responses, 5 tries, then list and cancel (deposit kept)", async () => {
         await reset();
         const mine = await book();
-        await book({ ...valid(), time: "12:00 PM", phone: "2105550132" });
-        const theirs = await book({ ...valid(), date: chicagoDay(12), email: "someone@example.com", phone: "2105550133" });
+        await book({ ...valid(), time: "12:00 PM", phone: "2103930132" });
+        const theirs = await book({ ...valid(), date: chicagoDay(12), email: "someone@example.com", phone: "2103930133" });
         const ask = email => post(signinCode.POST, "/api/account/code", { email, turnstileToken: "valid-recovery" });
         const known = await ask("Audit@Example.com"), unknown = await ask("nobody@example.com");
         assert.equal(known.status, 202); assert.deepEqual(await known.json(), await unknown.json(), "doesn't reveal who has booked");
@@ -594,7 +624,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
       });
       await t.test("maintenance sends one reminder the day before, and none for cancelled bookings", async () => {
         await reset(); await book({ ...valid(), date: chicagoDay(1) });
-        const gone = (await book({ ...valid(), date: chicagoDay(1), time: "12:00 PM", email: "gone@example.com", phone: "2105550127" })).confirmationCode;
+        const gone = (await book({ ...valid(), date: chicagoDay(1), time: "12:00 PM", email: "gone@example.com", phone: "2103930127" })).confirmationCode;
         const cams = await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE ?").bind(`${gone}-cam`).first();
         const goneToken = (await security.unseal(cams.payload)).text.match(/&token=([a-f0-9]{64})/)[1];
         assert.equal((await decide(gone, "cancel", goneToken)).status, 200);
@@ -619,7 +649,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         const id = `camotive${booked.confirmationCode.slice(4).toLowerCase()}`;
         const event = googleEvents.get(id);
         assert.ok(event, "event added to Cam's calendar with a stable id");
-        assert.match(event.description, /\+12105550123/); assert.match(event.description, /deposit paid/); assert.equal(event.location, "100 Synthetic Street");
+        assert.match(event.description, /\+12103930123/); assert.match(event.description, /deposit paid/); assert.equal(event.location, "100 Synthetic Street");
         assert.equal(Date.parse(event.end.dateTime) - Date.parse(event.start.dateTime), 3 * 3600000, "the 8–11 AM window is three hours");
         assert.equal((await decide(code, "cancel", token)).status, 200);
         await outbox.dispatchEmails(5);
@@ -645,7 +675,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
       }));
       await t.test("quote requests need the bot check, queue two emails and store nothing else", async () => {
         await reset();
-        const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", email: "quote@example.com", phone: "2105550126", timing: "Next month", notes: "White paint", turnstileToken: "valid-quote" };
+        const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", email: "quote@example.com", phone: "2103930126", timing: "Next month", notes: "White paint", turnstileToken: "valid-quote" };
         assert.equal((await quote.POST(request({ ...body, service: "rocket" }))).status, 400);
         assert.equal((await quote.POST(request({ ...body, turnstileToken: "valid-booking" }))).status, 400);
         const response = await quote.POST(request(body)); assert.equal(response.status, 201);
@@ -656,7 +686,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
       });
       await t.test("legacy appointments block their date", async () => {
         await reset();
-        await database.prepare("INSERT INTO appointments (confirmation_code, package_id, package_name, date, time, total, name, email, phone, vehicle, address, reminder) VALUES ('CAM-123456', 'full', 'Full', ?, '8:00 AM', 250, 'Legacy', 'test@example.com', '2105550123', 'Car', 'Address', 'none')").bind(valid().date).run();
+        await database.prepare("INSERT INTO appointments (confirmation_code, package_id, package_name, date, time, total, name, email, phone, vehicle, address, reminder) VALUES ('CAM-123456', 'full', 'Full', ?, '8:00 AM', 250, 'Legacy', 'test@example.com', '2103930123', 'Car', 'Address', 'none')").bind(valid().date).run();
         assert.equal((await route.POST(request(valid()))).status, 409);
         assert.equal(await count("secure_bookings"), 0); assert.equal(stripeSessions.size, 0);
       });
@@ -724,7 +754,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         const view = cookie => dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: cookie ? { cookie } : {} }));
         assert.equal((await view()).status, 401);
         const data = await (await view(session)).json();
-        assert.equal(data.upcoming.length, 1); assert.equal(data.upcoming[0].phone, "+12105550123"); assert.equal(data.upcoming[0].address, "100 Synthetic Street");
+        assert.equal(data.upcoming.length, 1); assert.equal(data.upcoming[0].phone, "+12103930123"); assert.equal(data.upcoming[0].address, "100 Synthetic Street");
         assert.equal(data.upcoming[0].deposit, 50); assert.equal(data.upcoming[0].paid, true);
         // A customer signed in to My appointments (even with the owner's email) is not an admin.
         await post(signinCode.POST, "/api/account/code", { email: "audit@example.com", turnstileToken: "valid-recovery" });
@@ -813,7 +843,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
       await t.test("dashboard: move a booking, cancel with refund, block time, and track quotes", async () => {
         await reset();
         const first = await book();
-        const other = await book({ ...valid(), time: "12:00 PM", email: "other@example.com", phone: "2105550140" });
+        const other = await book({ ...valid(), time: "12:00 PM", email: "other@example.com", phone: "2103930140" });
         const session = await adminSession();
         const act = body => post(dashboard.POST, "/api/admin/dashboard", body, { cookie: session });
         assert.equal((await post(dashboard.POST, "/api/admin/dashboard", { action: "cancel", code: first.confirmationCode })).status, 401);
@@ -835,7 +865,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         const day = chicagoDay(15);
         assert.equal((await act({ action: "block", date: day, times: ["8:00 AM"] })).status, 200);
         assert.deepEqual((await slots(day, 1)).days[0].slots.map(s => s.state), ["taken", "open", "open"]);
-        assert.equal((await route.POST(request({ ...valid(), date: day, email: "blocked@example.com", phone: "2105550141" }))).status, 409);
+        assert.equal((await route.POST(request({ ...valid(), date: day, email: "blocked@example.com", phone: "2103930141" }))).status, 409);
         assert.equal((await act({ action: "block", date: chicagoDay(16), times: ["all"] })).status, 200);
         assert.deepEqual((await slots(chicagoDay(16), 1)).days[0].slots.map(s => s.state), ["taken", "taken", "taken"]);
         const blockedWithBooking = await (await act({ action: "block", date: valid().date, times: ["all"] })).json();
@@ -844,7 +874,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         assert.deepEqual((await slots(day, 1)).days[0].slots.map(s => s.state), ["open", "open", "open"]);
         assert.equal((await act({ action: "block", date: day, times: ["9:00 PM"] })).status, 400);
         // Quotes are kept for the dashboard and can be marked replied.
-        const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", email: "quote@example.com", phone: "2105550126", timing: "", notes: "White paint", turnstileToken: "valid-quote" };
+        const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", email: "quote@example.com", phone: "2103930126", timing: "", notes: "White paint", turnstileToken: "valid-quote" };
         const { reference } = await (await quote.POST(request(body))).json();
         assert.ok(!JSON.stringify(await database.prepare("SELECT * FROM quote_requests").first()).includes("Mach-E"), "stored encrypted");
         let data = await (await dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { cookie: session } }))).json();
@@ -903,7 +933,7 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         await reset();
         const open = (await slots(future(7), 7)).days.flatMap(d => d.slots.filter(s => s.state === "open").map(s => ({ date: d.date, time: s.time })));
         for (let i = 0; i < 9; i++) {
-          const response = await route.POST(request({ ...valid(), ...open[i], email: `address${i}@example.com`, phone: `21055502${String(i).padStart(2, "0")}` }));
+          const response = await route.POST(request({ ...valid(), ...open[i], email: `address${i}@example.com`, phone: `21039302${String(i).padStart(2, "0")}` }));
           assert.equal(response.status, i < 8 ? 201 : 429, `booking ${i + 1}`);
         }
       });
@@ -924,9 +954,36 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
         assert.equal((await login("wrong horse battery", "203.0.113.7")).status, 429, "that address is slowed down");
         assert.equal((await login("correct horse battery", "198.51.100.4")).status, 201, "the owner can still sign in");
       });
+      await t.test("phone numbers and email addresses are checked before anything is booked", async () => {
+        await reset();
+        const attempt = async (changes, handler = route.POST) => {
+          const response = await handler(request({ ...valid(), ...changes }));
+          return { ...(await response.json()), status: response.status };
+        };
+        const fake = await attempt({ phone: "(210) 555-0123" });
+        assert.equal(fake.status, 400); assert.equal(fake.field, "phone"); assert.match(fake.error, /555/);
+        assert.equal((await attempt({ phone: "800-234-5678" })).field, "phone");
+        assert.equal((await attempt({ phone: "210 123 4567" })).field, "phone");
+        const nomail = await attempt({ email: "jim@nomail.example" });
+        assert.equal(nomail.status, 400); assert.equal(nomail.field, "email"); assert.match(nomail.error, /nomail\.example/);
+        assert.equal((await attempt({ email: "jim@nullmx.example" })).field, "email");
+        assert.equal(await count("secure_bookings"), 0, "nothing was booked");
+        // A DNS outage never stops a real customer.
+        assert.equal((await attempt({ email: "jim@dnsdown.example" })).status, 201);
+        // Each domain is looked up once, then remembered.
+        const before = dnsLookups.filter(l => l.startsWith("nomail.example")).length;
+        await attempt({ email: "jim@nomail.example" });
+        assert.equal(dnsLookups.filter(l => l.startsWith("nomail.example")).length, before);
+        // Quotes too.
+        const quoteBody = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", phone: "2103930126", email: "quote@nomail.example", timing: "", notes: "", turnstileToken: "valid-quote" };
+        const quoted = await quote.POST(request(quoteBody));
+        assert.equal(quoted.status, 400); assert.equal((await quoted.json()).field, "email");
+        const quotePhone = await quote.POST(request({ ...quoteBody, email: "quote@example.com", phone: "2105550126" }));
+        assert.equal(quotePhone.status, 400); assert.equal((await quotePhone.json()).field, "phone");
+      });
       await t.test("one address can send at most 10 quote requests a day", async () => {
         await reset();
-        const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", phone: "2105550126", timing: "Next month", notes: "", turnstileToken: "valid-quote" };
+        const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", phone: "2103930126", timing: "Next month", notes: "", turnstileToken: "valid-quote" };
         // Five an hour per address, so the requests are spread over three hours of one day.
         const realNow = Date.now, day = Math.floor(realNow() / 86400000) * 86400000;
         try {

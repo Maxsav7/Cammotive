@@ -1,13 +1,14 @@
 import { testMode, turnstileVerifyUrl } from "./providers";
 import { stripeReady } from "./stripe";
+// `field`: which form field the message is about, for the page to point at.
 export class HttpError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public field?: string) { super(message); }
 }
 export function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", ...(status === 429 ? { "Retry-After": "3600" } : {}) } });
 }
 export function failure(error: unknown) {
-  if (error instanceof HttpError) return json({ error: error.message }, error.status);
+  if (error instanceof HttpError) return json({ error: error.message, ...(error.field ? { field: error.field } : {}) }, error.status);
   console.error("booking_operation_failed"); // Deliberately no PII, tokens, SQL or provider errors.
   return json({ error: "Online booking is temporarily unavailable. Please call (210) 573-0671." }, 503);
 }
