@@ -18,15 +18,17 @@ const sections: [id: string, title: string, body: React.ReactNode][] = [
     <p>Prices on this website are starting prices for each vehicle size. When we arrive, we look over the vehicle and <strong>confirm the final price with you before any work begins</strong>.</p>
     <p>The price can be higher than the starting price when the vehicle needs more work than the service includes. Excessive pet hair or sand removal starts at $50. Severe stains, smoke, urine, mildew, mold and unusually neglected vehicles are quoted separately.</p>
     <p>If you don&apos;t want to pay a higher price, you can choose the service as booked with a narrower scope, or end the appointment. Ending it at that point counts as a cancellation by you (section 5).</p>
-    <p>Ceramic coating and paint correction are quoted individually after we assess the vehicle. The quote we give you sets the price and what&apos;s included.</p>
+    <p>Ceramic coating, paint enhancement, paint correction and shampoo or extraction are quoted individually after we assess the vehicle. The quote we give you sets the price and what&apos;s included.</p>
+    <p>A Maintenance Detail is for vehicles kept up with regular visits. If a vehicle is beyond maintenance condition, Full or Premium Detail pricing applies.</p>
   </>],
   ["results", "What to expect from results", <>
     <p>We work carefully and do our best on every vehicle, but some things can&apos;t always be fully fixed by detailing. These include permanent stains, sun damage, odors from deep in the vehicle, worn or faded materials, and scratches that go through the clear coat. Paint correction reduces swirls and scratches. It doesn&apos;t make paint perfect, and how much can be removed depends on how thick and healthy the paint is.</p>
-    <p>Interior surfaces and carpets can stay damp for several hours after cleaning. A ceramic coating needs time to cure. We&apos;ll tell you how to care for it afterwards, and its results and lifespan depend on following that care.</p>
+    <p>Interior surfaces and carpets can stay damp for several hours after cleaning. Wax, sealant and coating protection times are estimates; how long they last depends on use, weather and maintenance.</p>
+    <p>Ceramic coatings aren&apos;t scratch-proof. A coating needs a covered, dry location for the appointment, and the vehicle must be kept away from water and weather for the cure time we give you. Its results and lifespan depend on following the care we explain.</p>
   </>],
   ["booking", "Booking and the deposit", <>
     <p>Online bookings need a <strong>${depositDollars} deposit</strong>, paid on Stripe&apos;s secure checkout. We hold your time for {holdMinutes} minutes while you pay. The booking is confirmed once the deposit is paid. The deposit goes toward your total.</p>
-    <p>New customers get <strong>${firstVisitDiscount} off their first online booking</strong>. It&apos;s applied automatically to the first booking made with an email address and phone number that haven&apos;t booked with us before. It can only be used once per customer. We may remove it if it&apos;s claimed again using a different email or phone number.</p>
+    <p>First-time clients get <strong>${firstVisitDiscount} off one Full or Premium Detail</strong>. It&apos;s applied automatically to the first such booking made with an email address and phone number that haven&apos;t booked with us before. It can only be used once per customer and can&apos;t be combined with another offer. We may remove it if it&apos;s claimed again using a different email or phone number.</p>
     <p>The rest of the price is due when the work is finished. Pay with one of the payment methods we accept at the appointment.</p>
   </>],
   ["cancelling", "Cancelling or changing your appointment", <>

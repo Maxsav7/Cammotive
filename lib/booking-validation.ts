@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { prices, extras, bookingTimes, bookablePackages, bookingWindowDays, quoteServices } from "./booking-catalog";
+import { prices, extras, includedAddOns, bookingTimes, bookablePackages, bookingWindowDays, quoteServices } from "./booking-catalog";
 const text = (min: number, max: number) => z.string().trim().min(min).max(max).refine(v => !/[\u0000-\u001f\u007f]/.test(v));
 export function chicagoDay(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
@@ -59,6 +59,8 @@ export const quoteSchema = z.object({
 }).strict();
 export function estimate(input: z.infer<typeof bookingSchema>) {
   const service = prices[input.packageId];
-  return { packageName: `${service.name} · ${input.vehicleSize}`, addOns: input.addOnIds.map(id => extras[id][0]).join(", "),
-    total: service[input.vehicleSize] + input.addOnIds.reduce((n, id) => n + extras[id][1], 0) };
+  // An add-on the package already includes (engine bay cleaning in Premium) isn't charged twice.
+  const addOnIds = input.addOnIds.filter(id => !includedAddOns[input.packageId]?.includes(id));
+  return { packageName: `${service.name} · ${input.vehicleSize}`, addOns: addOnIds.map(id => extras[id][0]).join(", "),
+    total: service[input.vehicleSize] + addOnIds.reduce((n, id) => n + extras[id][1], 0) };
 }

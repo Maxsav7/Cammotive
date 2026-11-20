@@ -5,7 +5,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
 import { TERMS_VERSION } from "../lib/terms";
-import { prices, extras, bookingTimes, depositDollars, firstVisitDiscount, holdMinutes, slotLabel, slotPart } from "../lib/booking-catalog";
+import { prices, extras, includedAddOns, firstVisitPackages, bookingTimes, depositDollars, firstVisitDiscount, holdMinutes, slotLabel, slotPart } from "../lib/booking-catalog";
 
 type PackageId = "full" | "premium" | "maintenance";
 type AddOnId = keyof typeof extras;
@@ -16,11 +16,11 @@ type Status = { enabled: boolean; siteKey?: string | null };
 
 const PHONE = "(210) 573-0671";
 const packages: Record<PackageId, { blurb: string; time: string }> = {
-  full: { blurb: "A complete interior and exterior reset for a normally maintained vehicle.", time: "About 3–4 hours" },
-  premium: { blurb: "Everything in Full, plus shampoo or extraction, leather care and a 3–6 month sealant.", time: "Longer visit; we confirm timing" },
-  maintenance: { blurb: "For returning clients every 2–4 weeks, keeping a detailed car that way.", time: "Shorter visit" },
+  full: { blurb: "A thorough interior and exterior clean, with protective wax, for a regularly cared-for vehicle.", time: "About 3–4 hours" },
+  premium: { blurb: "Everything in Full, plus deeper interior cleaning, paint decontamination, a 6-month sealant and engine bay cleaning.", time: "Longer visit; we confirm timing" },
+  maintenance: { blurb: "For returning clients every 2–4 weeks after a Full or Premium Detail.", time: "Shorter visit" },
 };
-const sizes: Record<Size, string> = { small: "Coupe or sedan", medium: "Crossover, small SUV or truck", large: "Full-size truck or 3-row SUV" };
+const sizes: Record<Size, string> = { small: "Coupe or sedan", medium: "Crossover, small SUV or small truck", large: "Full-size truck, large SUV or 3-row SUV" };
 const steps = ["Service", "Add-ons", "Date & time", "Your details", "Deposit"];
 const SAVED = "camotive-booking";
 type Saved = { pkg: PackageId; size: Size; addOns: AddOnId[]; date: string; time: Slot | ""; contact: Record<"name" | "phone" | "email" | "vehicle" | "address", string> };
@@ -169,18 +169,23 @@ export default function BookingFlow() {
     if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { setDate(d); if ((bookingTimes as readonly string[]).includes(t ?? "")) setTime(t as Slot); }
   }, [confirmPayment, restore]);
 
-  const total = useMemo(() => prices[pkg][size] + addOns.reduce((n, id) => n + extras[id][1], 0), [pkg, size, addOns]);
+  // Add-ons the package already includes (engine bay cleaning in Premium) aren't offered or charged.
+  const included: readonly string[] = includedAddOns[pkg] ?? [];
+  const chosen = addOns.filter(id => !included.includes(id));
+  // The first-visit discount is for a Full or Premium Detail only.
+  const discountable = firstVisitPackages.includes(pkg);
+  const total = useMemo(() => prices[pkg][size] + chosen.reduce((n, id) => n + extras[id][1], 0), [pkg, size, chosen]);
   // Move focus to the new step's heading so keyboard and screen-reader users aren't left on a removed button.
   const go = (n: number) => { setStep(n); setError(""); requestAnimationFrame(() => { top.current?.scrollIntoView({ behavior: "smooth", block: "start" }); top.current?.querySelector<HTMLElement>("h3")?.focus({ preventScroll: true }); }); };
   const detailsComplete = Object.values(contact).every(v => v.trim().length > 1);
   const serviceLine = `${prices[pkg].name}, ${size}`;
-  const addOnLine = addOns.length ? addOns.map(id => extras[id][0]).join(", ") : "None";
+  const addOnLine = chosen.length ? chosen.map(id => extras[id][0]).join(", ") : "None";
 
   async function pay(event: FormEvent) {
     event.preventDefault();
     if (busy || !botToken || !time || !agreed) return;
     setBusy(true); setError(""); setNotice("");
-    const payload = { packageId: pkg, vehicleSize: size, addOnIds: addOns, date, time, ...contact };
+    const payload = { packageId: pkg, vehicleSize: size, addOnIds: chosen, date, time, ...contact };
     const signature = JSON.stringify(payload);
     if (submission.current.signature !== signature) submission.current = { signature, key: crypto.randomUUID() };
     try {
@@ -206,10 +211,10 @@ export default function BookingFlow() {
   // Until online payment is set up, every step works the same, but the last one
   // sends the chosen booking to Camotive by text instead of taking the deposit.
   const textMode = !status.enabled;
-  const smsBody = [`Hi Camotive, I'd like to book:`, `${serviceLine}${addOns.length ? ` + ${addOnLine}` : ""}`,
+  const smsBody = [`Hi Camotive, I'd like to book:`, `${serviceLine}${chosen.length ? ` + ${addOnLine}` : ""}`,
     date && time ? `${fmt(date, { weekday: "long", month: "long", day: "numeric" })}, ${slotLabel[time]}` : "",
     `Vehicle: ${contact.vehicle}`, `Address: ${contact.address}`, `${contact.name}, ${contact.phone}, ${contact.email}`, `Estimate: $${total}`,
-    firstTime ? `This is my first booking with Camotive ($${firstVisitDiscount} off)` : "",
+    firstTime && discountable ? `This is my first booking with Camotive ($${firstVisitDiscount} off)` : "",
     `I agree to the Camotive Terms of Service (${TERMS_VERSION}).`].filter(Boolean).join("\n");
 
   if (done) return <div className="booking-shell" ref={top}><div className="booking-done" role="status">
@@ -239,7 +244,7 @@ export default function BookingFlow() {
 
     {step === 1 && <div className="booking-panel">
       <h3 tabIndex={-1}>Choose your detail</h3>
-      <p className="first-visit-note"><strong>${firstVisitDiscount} off your first detail.</strong> New customers get it automatically when booking.</p>
+      <p className="first-visit-note"><strong>${firstVisitDiscount} off your first Full or Premium Detail.</strong> First-time clients get it automatically when booking.</p>
       <div className="package-choice" role="radiogroup" aria-label="Detail package">
         {(Object.keys(packages) as PackageId[]).map(id => <button type="button" role="radio" aria-checked={pkg === id} key={id} className={pkg === id ? "selected" : ""} onClick={() => setPkg(id)}>
           <span className="package-name">{prices[id].name}</span><span className="package-price">from ${prices[id].small}</span>
@@ -258,9 +263,9 @@ export default function BookingFlow() {
       <button type="button" className="back" onClick={() => go(1)}>Back</button>
       <h3 tabIndex={-1}>Add anything extra?</h3>
       <p className="step-intro">Optional. Add-ons are done during the same visit.</p>
-      <div className="addon-grid">{(Object.keys(extras) as AddOnId[]).map(id => <label key={id} className={addOns.includes(id) ? "selected" : ""}><input type="checkbox" checked={addOns.includes(id)}
+      <div className="addon-grid">{(Object.keys(extras) as AddOnId[]).filter(id => !included.includes(id)).map(id => <label key={id} className={addOns.includes(id) ? "selected" : ""}><input type="checkbox" checked={addOns.includes(id)}
         onChange={() => setAddOns(c => c.includes(id) ? c.filter(x => x !== id) : [...c, id])} /><span>{extras[id][0]}</span><b>+${extras[id][1]}</b></label>)}</div>
-      <div className="booking-footer"><div><small>Estimated total</small><strong>${total}</strong></div><button type="button" className="button" onClick={() => go(3)}>{addOns.length ? "Next: choose a time" : "Skip: choose a time"}</button></div>
+      <div className="booking-footer"><div><small>Estimated total</small><strong>${total}</strong></div><button type="button" className="button" onClick={() => go(3)}>{chosen.length ? "Next: choose a time" : "Skip: choose a time"}</button></div>
     </div>}
 
     {step === 3 && <div className="booking-panel">
@@ -295,12 +300,12 @@ export default function BookingFlow() {
         <div><dt>Where</dt><dd>{contact.address}<br />{contact.vehicle}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
         <div><dt>Contact</dt><dd>{contact.name}<br />{contact.phone} · {contact.email}</dd><button type="button" className="text-button" onClick={() => go(4)}>Change</button></div>
       </dl>
-      <label className="agree"><input type="checkbox" checked={firstTime} onChange={e => setFirstTime(e.target.checked)} />
-        <span>This is my first booking with Camotive (<strong>${firstVisitDiscount} off</strong>).</span></label>
+      {discountable && <label className="agree"><input type="checkbox" checked={firstTime} onChange={e => setFirstTime(e.target.checked)} />
+        <span>This is my first booking with Camotive (<strong>${firstVisitDiscount} off</strong>).</span></label>}
       <label className="agree"><input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} required />
         <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service<span className="sr-only"> (opens in a new tab)</span></a>, including that the ${depositDollars} deposit is <strong>non-refundable if I cancel</strong>.</span></label>
       <p className="text-mode-note" role="note">Online payment isn&apos;t available yet. Send this booking to us by text and we&apos;ll confirm your time and how to pay the ${depositDollars} deposit that holds it.</p>
-      <div className="booking-footer"><div><small>Estimated total{firstTime ? ` after $${firstVisitDiscount} off` : ""}</small><strong>${firstTime ? Math.max(0, total - firstVisitDiscount) : total}</strong></div>
+      <div className="booking-footer"><div><small>Estimated total{firstTime && discountable ? ` after $${firstVisitDiscount} off` : ""}</small><strong>${firstTime && discountable ? Math.max(0, total - firstVisitDiscount) : total}</strong></div>
         <div className="hero-actions"><a className="outline-button" href="tel:+12105730671">Call {PHONE}</a>{agreed ? <a className="button" href={`sms:+12105730671?&body=${encodeURIComponent(smsBody)}`}>Text us this booking</a>
           : <button type="button" className="button" disabled title="Agree to the Terms of Service first">Text us this booking</button>}</div></div>
     </div>}
@@ -320,7 +325,7 @@ export default function BookingFlow() {
         <div><dt>Deposit due now</dt><dd>${depositDollars}</dd></div>
         <div><dt>Due on the day</dt><dd>${Math.max(0, total - depositDollars)}</dd></div>
       </dl>
-      <p className="first-visit-note"><strong>First booking with Camotive?</strong> ${firstVisitDiscount} comes off your total automatically, so you pay ${firstVisitDiscount} less on the day. It shows on your confirmation.</p>
+      {discountable && <p className="first-visit-note"><strong>First Full or Premium Detail with Camotive?</strong> ${firstVisitDiscount} comes off your total automatically, so you pay ${firstVisitDiscount} less on the day. It shows on your confirmation.</p>}
       <ul className="review-notes">
         <li>The deposit confirms your time and goes toward your total. We confirm the final price before starting.</li>
         <li>You&apos;ll pay on Stripe&apos;s secure checkout. We hold this time for {holdMinutes} minutes while you pay.</li>
