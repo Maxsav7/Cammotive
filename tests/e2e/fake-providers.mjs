@@ -151,6 +151,12 @@ createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/__calendar") return send(res, 200, [...events.values()]);
     if (req.method === "GET" && url.pathname === "/__emails") return send(res, 200, emails);
     if (req.method === "GET" && url.pathname === "/__health") return send(res, 200, { ok: true });
+    // Cloudflare DNS (DNS over HTTPS): domains containing "nomail" don't exist; the rest take email.
+    if (req.method === "GET" && url.pathname === "/dns-query") {
+      const name = url.searchParams.get("name") ?? "";
+      if (name.includes("nomail")) return send(res, 200, { Status: 3, Answer: [] });
+      return send(res, 200, { Status: 0, Answer: url.searchParams.get("type") === "MX" ? [{ name, type: 15, data: `10 mx.${name}.` }] : [] });
+    }
     // Every test comes from 127.0.0.1; this makes each one a fresh visitor for the rate limits.
     if (req.method === "POST" && url.pathname === "/__forget-limits") { db.exec("DELETE FROM booking_limits"); return send(res, 200, { ok: true }); }
     send(res, 404, { error: "not found" });

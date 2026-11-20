@@ -71,7 +71,7 @@ async function fillBooking(page, email, { service = "premium", addOn = true } = 
   await page.getByRole("button", { name: "Next: your details" }).click();
   await page.getByLabel("Full name").fill("Test Customer");
   // A different number per booking: the same phone can only book a few times a day.
-  await page.getByLabel("Mobile number").fill(`(210) 555-${String(Math.floor(Math.random() * 9000) + 1000)}`);
+  await page.getByLabel("Mobile number").fill(`(210) 393-${String(Math.floor(Math.random() * 9000) + 1000)}`);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Vehicle").fill("2022 Porsche 911");
   await page.getByLabel("Service address").fill("123 Main Street, San Antonio, TX");
@@ -91,6 +91,52 @@ async function bookUntilCheckout(page, email, options) {
   await expect(page.getByRole("heading", { name: "Fake Stripe Checkout" })).toBeVisible();
   return { dayName, when };
 }
+
+test("the details step points out a mistyped phone number or email before going on", async ({ page }) => {
+  await page.goto("/book?service=full&size=small");
+  await page.getByRole("button", { name: "Next: add-ons" }).click();
+  await page.getByRole("button", { name: /choose a time/ }).click();
+  await page.locator('.calendar-days button[data-state="open"]:not(:disabled)').first().click();
+  await page.locator(".slot-list button:not(:disabled)").first().click();
+  await page.getByRole("button", { name: "Next: your details" }).click();
+  const phone = page.getByLabel("Mobile number"), email = page.getByLabel("Email");
+  await page.getByLabel("Full name").fill("Jim Test");
+  await phone.fill("(210) 555-0123");
+  await email.fill("jim@gmial.com");
+  await page.getByLabel("Vehicle").fill("2022 Porsche 911");
+  await page.getByLabel("Service address").fill("123 Main Street, San Antonio, TX");
+  await page.getByRole("button", { name: "Next: review and pay" }).click();
+  // Still on the details step, with the problem next to the field.
+  await expect(page.getByRole("heading", { name: "Where is the car?" })).toBeVisible();
+  await expect(phone).toHaveAttribute("aria-invalid", "true");
+  await expect(phone).toBeFocused();
+  await expect(page.locator("#booking-phone-note")).toHaveText("Invalid phone number.");
+  // A likely typo gets a one-tap fix, but doesn't block.
+  await page.getByRole("button", { name: "jim@gmail.com" }).click();
+  await expect(email).toHaveValue("jim@gmail.com");
+  await phone.fill("2103931934");
+  await phone.blur();
+  await expect(phone).toHaveValue("(210) 393-1934");
+  await expect(phone).not.toHaveAttribute("aria-invalid", "true");
+  await page.getByRole("button", { name: "Next: review and pay" }).click();
+  await expect(page.getByRole("button", { name: "Pay $50 deposit" })).toBeVisible();
+});
+
+test("if the email's domain takes no email, the customer is sent back to fix it", async ({ page }) => {
+  const { pay } = await fillBooking(page, "someone@nomail.example");
+  await pay.click();
+  const email = page.getByLabel("Email");
+  await expect(page.getByRole("heading", { name: "Where is the car?" })).toBeVisible();
+  await expect(email).toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator("#booking-email-note")).toHaveText("Invalid email address.");
+  await email.fill("someone@example.com");
+  await expect(email).not.toHaveAttribute("aria-invalid", "true");
+  await page.getByRole("button", { name: "Next: review and pay" }).click();
+  await page.getByLabel(/non-refundable if I cancel/).check();
+  await page.getByRole("button", { name: "Pay $50 deposit" }).click();
+  await expect(page.getByRole("heading", { name: "Fake Stripe Checkout" })).toBeVisible();
+  await page.getByRole("link", { name: "Back" }).click(); // leave without paying
+});
 
 test("if a booking is refused, the customer sees why and can try again", async ({ page }, testInfo) => {
   // The first try is refused (too many requests), the second finds the slot just taken.
@@ -235,10 +281,16 @@ test("request a ceramic coating quote", async ({ page, request }, testInfo) => {
   await expect(page.getByRole("radio", { name: "Ceramic coating" })).toBeChecked();
   await page.getByLabel("Vehicle").fill(`2023 Tesla Model Y, white (${testInfo.project.name})`);
   await page.getByLabel("Full name").fill("Quote Customer");
-  await page.getByLabel("Mobile number").fill("(210) 555-0199");
-  await page.getByLabel("Email").fill(email);
+  // The same phone and email checks as booking.
+  await page.getByLabel("Mobile number").fill("800 234 5678");
+  await page.getByLabel("Email").fill(email.replace("example.com", "example.con"));
   const send = page.getByRole("button", { name: "Request a quote" });
   await expect(send).toBeEnabled();
+  await send.click();
+  await expect(page.locator("#quote-phone-note")).toHaveText("Invalid phone number.");
+  await page.getByRole("button", { name: email }).click();
+  await expect(page.getByLabel("Email")).toHaveValue(email);
+  await page.getByLabel("Mobile number").fill("(210) 393-0199");
   await send.click();
   await expect(page.getByRole("heading", { name: /reply within one business day/ })).toBeVisible();
   await emailsTo(request, email, /quote/i);
@@ -265,7 +317,7 @@ test("Cam's dashboard: sign in with an emailed code, move a job, block a day, re
   await page.goto("/quote?service=correction");
   await page.getByLabel("Vehicle").fill(`2019 Audi S5 ${testInfo.project.name}`);
   await page.getByLabel("Full name").fill("Quote Person");
-  await page.getByLabel("Mobile number").fill("(210) 555-0177");
+  await page.getByLabel("Mobile number").fill("(210) 393-0177");
   await page.getByLabel("Email").fill(`q-${email}`);
   await page.getByRole("button", { name: "Request a quote" }).click();
   await expect(page.getByRole("heading", { name: /reply within one business day/ })).toBeVisible();

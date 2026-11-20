@@ -12,3 +12,4 @@ export const resendEmailsUrl = () => `${testOrigin() ?? "https://api.resend.com"
 export const googleTokenUrl = () => `${testOrigin() ?? "https://oauth2.googleapis.com"}/token`;
 export const stripeApi = () => `${testOrigin() ?? "https://api.stripe.com"}/v1`;
 export const googleCalendarApi = () => `${testOrigin() ?? "https://www.googleapis.com"}/calendar/v3`;
+export const dnsApi = () => `${testOrigin() ?? "https://cloudflare-dns.com"}/dns-query`;

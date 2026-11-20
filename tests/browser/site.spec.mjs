@@ -67,7 +67,7 @@ test("before payment is set up, every booking step works and the last one sends 
   await page.locator(".slot-list button:not(:disabled)").first().click();
   await page.getByRole("button", { name: "Next: your details" }).click();
   await page.getByLabel("Full name").fill("Test Customer");
-  await page.getByLabel("Mobile number").fill("(210) 555-0123");
+  await page.getByLabel("Mobile number").fill("(210) 393-0123");
   await page.getByLabel("Email").fill("test@example.com");
   await page.getByLabel("Vehicle").fill("2022 Porsche 911");
   await page.getByLabel("Service address").fill("123 Main Street, San Antonio, TX");

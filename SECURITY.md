@@ -171,6 +171,12 @@ are allowed. API responses carry a base policy. The browser suites fail on any
 policy violation, and `tests/rendered-html.test.mjs` checks the nonce on both
 builds.
 
+Customer phone numbers and email addresses are checked in the forms and again on
+the server (`lib/contact-checks.ts`): US numbering-plan rules (no 555, toll-free or
+impossible area codes and exchanges) and email format. The server also asks
+Cloudflare's public DNS (`lib/email-domain.ts`) whether the email's domain takes
+mail; only the domain is sent, and a failed lookup lets the request through.
+
 Cam's dashboard session is an HttpOnly, SameSite=Strict cookie (`__Host-` and
 Secure on HTTPS); the token never reaches page scripts or browser storage.
 

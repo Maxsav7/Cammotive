@@ -4,6 +4,7 @@
 // composed into a text message to Cam.
 import { FormEvent, useEffect, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
+import ContactFields, { contactProblems, firstProblem, type ContactField, type ContactNote, type Touched } from "./ContactFields";
 import { quoteServices } from "../lib/booking-catalog";
 
 type Service = keyof typeof quoteServices;
@@ -17,6 +18,8 @@ export default function QuoteForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<string | null>(null);
+  const [touched, setTouched] = useState<Touched>({});
+  const [contactNote, setContactNote] = useState<ContactNote>(null);
 
   useEffect(() => {
     fetch("/api/appointments/status", { cache: "no-store" }).then(r => r.json()).then(setStatus).catch(() => setStatus({ enabled: false }));
@@ -33,11 +36,17 @@ export default function QuoteForm() {
       window.location.href = `sms:+12105730671?&body=${encodeURIComponent(body)}`;
       return;
     }
-    if (busy || !botToken) return;
+    if (busy || !botToken || firstProblem("quote", contactProblems(form.phone, form.email, contactNote), setTouched)) return;
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, turnstileToken: botToken }) });
       const result = await response.json();
+      if (!response.ok && (result.field === "email" || result.field === "phone")) {
+        const field: ContactField = result.field;
+        setContactNote({ field, message: result.error }); setTouched(t => ({ ...t, [field]: true }));
+        document.getElementById(`quote-${field}`)?.focus();
+        return;
+      }
       if (!response.ok) { setError(result.error || `Couldn't send your request. Please text ${PHONE}.`); return; }
       setSent(result.reference);
     } catch { setError(`Connection interrupted. Try again, or text ${PHONE}.`); }
@@ -57,8 +66,8 @@ export default function QuoteForm() {
     <div className="form-grid">
       <label className="wide">Vehicle<input required minLength={3} maxLength={120} value={form.vehicle} onChange={set("vehicle")} placeholder="Year, make, model and color" /></label>
       <label>Full name<input required minLength={2} maxLength={100} autoComplete="name" value={form.name} onChange={set("name")} /></label>
-      <label>Mobile number<input required type="tel" autoComplete="tel" value={form.phone} onChange={set("phone")} placeholder="(210) 555-0123" /></label>
-      <label>Email<input required type="email" autoComplete="email" maxLength={254} value={form.email} onChange={set("email")} /></label>
+      <ContactFields prefix="quote" phone={form.phone} email={form.email} onChange={(field, value) => setForm(f => ({ ...f, [field]: value }))}
+        touched={touched} onTouch={field => setTouched(t => ({ ...t, [field]: true }))} note={contactNote} clearNote={() => setContactNote(null)} />
       <label><span>Preferred timing <span className="optional">Optional</span></span><input maxLength={200} value={form.timing} onChange={set("timing")} placeholder="For example: weekends in November" /></label>
       <label className="wide"><span>Anything we should know? <span className="optional">Optional</span></span><textarea rows={4} maxLength={1500} value={form.notes} onChange={set("notes")} placeholder="Paint condition, swirls or scratches you've noticed, where the car is parked" /></label>
     </div>
