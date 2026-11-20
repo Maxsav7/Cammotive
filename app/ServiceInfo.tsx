@@ -65,7 +65,8 @@ const questions = [
 
 export function DetailChooser() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const complete = questions.every(q => answers[q.id]);
+  const answered = questions.filter(q => answers[q.id]).length;
+  const complete = answered === questions.length;
   let result: { title: string; why: string; href: string; cta: string } | null = null;
   if (complete) {
     if (answers.worry === "paint") result = { title: "Paint correction", why: "Swirls and scratches are in the paint itself, so washing won't remove them. We assess the finish and quote the right level of polishing.", href: "/quote?service=correction", cta: "Request a paint assessment" };
@@ -82,7 +83,9 @@ export function DetailChooser() {
       </div></fieldset>)}</div>
       <div className="chooser-result" aria-live="polite">
         {result ? <><p className="eyebrow">We&apos;d recommend</p><h3>{result.title}</h3><p>{result.why}</p><a className="button" href={result.href}>{result.cta}</a></>
-          : <><p className="eyebrow">Your recommendation</p><p className="chooser-empty">Answer the questions and we&apos;ll point you to the right service.</p></>}
+          : <><p className="eyebrow">Your recommendation</p><p className="chooser-empty">Answer the questions and we&apos;ll point you to the right service.</p>
+            <div className="chooser-progress"><span aria-hidden="true">{questions.map(q => <i key={q.id} className={answers[q.id] ? "done" : ""} />)}</span>
+              <small>{answered} of {questions.length} answered</small></div></>}
       </div>
     </div>
   </section>;

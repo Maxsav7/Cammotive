@@ -185,3 +185,41 @@ test("Terms of Service: linked from every footer, with the deposit and cancellat
   await expect(page.locator("#booking")).toContainText("$25 off one Full or Premium Detail");
   await expect(page.locator(".terms-section")).toHaveCount(16);
 });
+
+// "Which detail do I need?" on /mobile-detailing: every answer fits on one line, each row of
+// answers spans the column, and on wide screens the recommendation card's top and bottom line
+// up with the first question and the last row of answers, before and after answering.
+test("the detail chooser lines up at every width", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own widths");
+  const measure = () => page.evaluate(() => {
+    const box = el => el.getBoundingClientRect();
+    const column = box(document.querySelector(".chooser-questions")), card = box(document.querySelector(".chooser-result"));
+    const rows = [...document.querySelectorAll(".chooser-questions fieldset > div")].map(row => {
+      const labels = [...row.querySelectorAll("label")].map(box);
+      return { left: Math.min(...labels.map(b => b.left)), right: Math.max(...labels.map(b => b.right)), bottom: Math.max(...labels.map(b => b.bottom)), tallest: Math.max(...labels.map(b => b.height)) };
+    });
+    return { column: { left: column.left, right: column.right, top: column.top }, card: { left: card.left, top: card.top, bottom: card.bottom }, rows };
+  });
+  const check = (layout, label) => {
+    for (const [i, row] of layout.rows.entries()) {
+      expect(row.tallest, `${label}, question ${i + 1}: an answer wraps`).toBeLessThanOrEqual(54);
+      expect(Math.abs(row.left - layout.column.left), `${label}, question ${i + 1}: left edge`).toBeLessThanOrEqual(1);
+      expect(Math.abs(row.right - layout.column.right), `${label}, question ${i + 1}: right edge`).toBeLessThanOrEqual(1);
+    }
+    if (layout.card.left > layout.column.right) {
+      expect(Math.abs(layout.card.top - layout.column.top), `${label}: card top`).toBeLessThanOrEqual(1);
+      expect(Math.abs(layout.card.bottom - layout.rows.at(-1).bottom), `${label}: card bottom`).toBeLessThanOrEqual(1);
+    } else {
+      expect(Math.abs(layout.card.left - layout.column.left), `${label}: card under the questions`).toBeLessThanOrEqual(1);
+    }
+  };
+  for (const width of [1440, 1288, 1180, 1141, 1140, 1024, 820, 600, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/mobile-detailing");
+    check(await measure(), `${width}px`);
+    // The longest recommendation.
+    for (const answer of ["A few months ago", "Stains, spills or pet hair", "Not right now"]) await page.getByText(answer, { exact: true }).click();
+    await expect(page.locator(".chooser-result h3")).toHaveText("Premium Detail");
+    check(await measure(), `${width}px, recommending`);
+  }
+});

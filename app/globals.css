@@ -565,14 +565,26 @@ p { text-wrap: pretty; }
 .fact-list dt { font-size: 14px; font-weight: 600; }
 .fact-list dd { margin: 0; font-size: 15px; color: var(--muted); }
 .chooser { border-top: 1px solid var(--line); }
-.chooser-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 32px; align-items: start; }
-.chooser-questions { display: grid; gap: 28px; }
+/* Wide screens: the card is as tall as the questions, so their top and bottom edges line
+   up; the questions get the rest of the width, enough for every answer on one line. */
+.chooser-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; align-items: stretch; }
+/* If a long recommendation (or large text settings) makes the card taller, the questions
+   spread to match, so the bottom edges still line up. */
+.chooser-questions { display: grid; gap: 28px; align-content: space-between; }
 .chooser-questions fieldset { margin: 0; padding: 0; border: 0; }
-.chooser-questions fieldset > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.chooser-result { position: sticky; top: 110px; padding: 30px; border-radius: 22px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--panel-edge); }
-.chooser-result h3 { font-size: 30px; margin-bottom: 12px; }
-.chooser-result p:not(.eyebrow) { color: var(--muted); margin-bottom: 24px; }
+/* Each row of answers spans the column: thirds for three answers, halves for two. */
+.chooser-questions fieldset > div { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; }
+.chooser-questions label { justify-content: center; text-align: center; }
+.chooser-result { display: flex; flex-direction: column; align-items: flex-start; padding: 28px; border-radius: 22px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--panel-edge); }
+.chooser-result h3 { font-size: 28px; margin-bottom: 10px; }
+.chooser-result p:not(.eyebrow) { color: var(--muted); font-size: 15px; line-height: 1.6; margin-bottom: 22px; }
+.chooser-result .button { margin-top: auto; }
 .chooser-empty { font-size: 15px; }
+.chooser-progress { margin-top: auto; width: 100%; display: grid; gap: 10px; }
+.chooser-progress span { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.chooser-progress i { height: 4px; border-radius: 4px; background: var(--line); transition: background .2s; }
+.chooser-progress i.done { background: var(--violet, var(--accent)); }
+.chooser-progress small { color: var(--muted); font-size: 13px; }
 .after-you-book { border-top: 1px solid var(--line); }
 .timeline { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0 0 40px; padding: 0; list-style: none; counter-reset: none; }
 .timeline li { position: relative; padding: 26px 24px 28px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--panel-edge); }
@@ -601,8 +613,7 @@ p { text-wrap: pretty; }
 
 @media (max-width: 1100px) {
   .package-choice { grid-template-columns: 1fr; }
-  .availability, .chooser-grid { grid-template-columns: 1fr; }
-  .chooser-result { position: static; }
+  .availability { grid-template-columns: 1fr; }
   .timeline { grid-template-columns: 1fr 1fr; }
   .story-columns { grid-template-columns: 1fr 1fr; }
   .service-story { gap: 44px; }
@@ -614,7 +625,7 @@ p { text-wrap: pretty; }
   .service-story.reverse .service-story-media { order: 0; }
   .service-story-media img { aspect-ratio: 4 / 3; }
   .service-stories { gap: 72px; }
-  .quote-services, .chooser-questions fieldset > div { grid-template-columns: 1fr 1fr; }
+  .quote-services { grid-template-columns: 1fr 1fr; }
   .quote-form, .quote-done { padding: 28px 22px; }
   .done-summary { grid-template-columns: 1fr 1fr; }
   .done-summary > div:nth-child(2) { border-right: 0; }
@@ -629,7 +640,7 @@ p { text-wrap: pretty; }
   .review-list > div { grid-template-columns: 1fr auto; gap: 4px 12px; }
   .review-list dd { grid-column: 1; grid-row: 2; }
   .review-list .text-button { grid-row: 1 / 3; grid-column: 2; align-self: center; }
-  .chooser-questions fieldset > div { grid-template-columns: 1fr; }
+
   .availability-calendar { padding: 10px; }
   .availability-calendar .calendar-days button { min-height: 46px; }
   .manage-card { padding: 22px; }
@@ -1110,3 +1121,14 @@ p { text-wrap: pretty; }
 /* Announcement bar edge and keyboard focus */
 .announcement { border-bottom-color: #8b6cff4d; }
 .site-shell :focus-visible { outline-color: var(--violet); }
+
+/* Detail chooser: below 1140px the card moves under the questions; below 760px the
+   answers stack, since three no longer fit side by side on one line each. */
+@media (max-width: 1140px) {
+  .chooser-grid { grid-template-columns: 1fr; }
+  .chooser-progress { margin-top: 8px; }
+}
+@media (max-width: 760px) {
+  .chooser-questions fieldset > div { grid-auto-flow: row; grid-template-columns: 1fr; }
+  .chooser-questions label { justify-content: flex-start; text-align: left; }
+}
