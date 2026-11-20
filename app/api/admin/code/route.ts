@@ -17,9 +17,11 @@ export async function POST(request: Request) {
     if (!parsed.success) throw new HttpError(400, "Enter your email.");
     const { email, turnstileToken } = parsed.data;
     await verifyBot(turnstileToken, "recovery");
-    await limit("admin-code-budget", "global", 30, 86400);
     if (adminEmails().includes(email)) {
+      // Only codes actually sent count, so requests for other addresses can't use
+      // up the owner's budget and stop him resetting his password.
       await limit("admin-code-recipient", email, 6, 3600);
+      await limit("admin-code-budget", "global", 30, 86400);
       const key = await adminKey(email);
       const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
       await db.prepare(`INSERT INTO customer_codes (email_hash, code_hash, expires, attempts) VALUES (?, ?, ?, 0)

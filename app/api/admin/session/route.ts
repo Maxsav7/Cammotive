@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db, limit, limitRequest, requireDashboard } from "@/lib/booking-store";
+import { clientAddress } from "@/lib/booking-db";
 import { configuredOrigin, digest, failure, HttpError, json, readJson } from "@/lib/booking-security";
 import { adminEmails, adminKey, createAdminSession, endAdminSessions, requireAdmin } from "@/lib/admin-session";
 import { hashPassword, PASSWORD_RULE, validPassword, verifyPassword } from "@/lib/admin-password";
@@ -25,7 +26,12 @@ export async function POST(request: Request) {
     const body = parsed.data;
     const isOwner = adminEmails().includes(body.email);
     const key = await adminKey(body.email);
-    await limit("admin-signin-attempts", key, 10, 3600);
+    // Wrong guesses are counted per account and address, so someone who knows the
+    // owner's email can't lock him out from their own connection; the account-wide
+    // ceiling still stops a guessing attack spread over many addresses. Each emailed
+    // code also allows only 5 tries.
+    await limit("admin-signin-attempts", `${key}:${clientAddress(request)}`, 10, 3600);
+    await limit("admin-signin-account", key, 50, 3600);
 
     if ("password" in body) {
       const row = isOwner ? await db.prepare("SELECT password_hash FROM admin_credentials WHERE email_hash = ?").bind(key).first() : null;

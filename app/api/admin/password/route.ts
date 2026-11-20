@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const parsed = schema.safeParse(await readJson(request));
     if (!parsed.success) throw new HttpError(400, "Enter your current and new password.");
     if (!validPassword(parsed.data.newPassword)) throw new HttpError(400, PASSWORD_RULE);
-    await limit("admin-signin-attempts", emailHash, 10, 3600);
+    await limit("admin-password-change", emailHash, 10, 3600);
     const row = await db.prepare("SELECT password_hash FROM admin_credentials WHERE email_hash = ?").bind(emailHash).first();
     if (!row || !await verifyPassword(parsed.data.currentPassword, String(row.password_hash))) throw new HttpError(401, "Your current password isn't right.");
     await db.prepare("UPDATE admin_credentials SET password_hash = ?, updated_at = ? WHERE email_hash = ?")
