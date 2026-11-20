@@ -2,7 +2,7 @@ import { z } from "zod";
 import { db, limit, limitRequest, requireDashboard } from "@/lib/booking-store";
 import { clientAddress } from "@/lib/booking-db";
 import { configuredOrigin, digest, failure, HttpError, json, readJson } from "@/lib/booking-security";
-import { adminEmails, adminKey, createAdminSession, endAdminSessions, requireAdmin } from "@/lib/admin-session";
+import { adminCookie, adminEmails, adminKey, createAdminSession, endAdminSessions, requireAdmin } from "@/lib/admin-session";
 import { hashPassword, PASSWORD_RULE, validPassword, verifyPassword } from "@/lib/admin-password";
 import { emailJob, sendQueuedEmailsSoon } from "@/lib/booking-outbox";
 import { adminPasswordChangedEmail } from "@/lib/booking-emails";
@@ -14,6 +14,12 @@ const schema = z.union([
   // First-time setup or "forgot password": the emailed code proves inbox access, then sets a new password.
   z.object({ email, code: z.string().trim().regex(/^\d{6}$/), newPassword: z.string().max(200) }).strict(),
 ]);
+// Signs in: the session goes into the dashboard cookie, never into the response body.
+async function signedIn(email: string) {
+  const response = json({ signedIn: true }, 201);
+  response.headers.append("set-cookie", adminCookie(await createAdminSession(email)));
+  return response;
+}
 const WRONG_CODE = "That code isn't right or has expired. Request a new one.";
 const WRONG_PASSWORD = "That email and password don't match. Try again, or reset your password.";
 
@@ -38,7 +44,7 @@ export async function POST(request: Request) {
       // Same work and the same answer whether or not the account exists.
       const ok = await verifyPassword(body.password, String(row?.password_hash ?? "pbkdf2-sha256$100000$AAAAAAAAAAAAAAAAAAAAAA==$AAAA"));
       if (!isOwner || !row || !ok) throw new HttpError(401, WRONG_PASSWORD);
-      return json({ session: await createAdminSession(body.email) }, 201);
+      return signedIn(body.email);
     }
 
     if (!validPassword(body.newPassword)) throw new HttpError(400, PASSWORD_RULE);
@@ -54,7 +60,7 @@ export async function POST(request: Request) {
     await endAdminSessions(key);
     await (await emailJob(null, `admin-password-${crypto.randomUUID()}`, adminPasswordChangedEmail(body.email))).run();
     sendQueuedEmailsSoon();
-    return json({ session: await createAdminSession(body.email) }, 201);
+    return signedIn(body.email);
   } catch (error) { return failure(error); }
 }
 
@@ -66,6 +72,8 @@ export async function DELETE(request: Request) {
     const { tokenHash, emailHash } = await requireAdmin(request);
     if (new URL(request.url).searchParams.get("everywhere") === "1") await endAdminSessions(emailHash);
     else await db.prepare("DELETE FROM customer_sessions WHERE token_hash = ?").bind(tokenHash).run();
-    return json({ signedOut: true });
+    const response = json({ signedOut: true });
+    response.headers.append("set-cookie", adminCookie("", 0));
+    return response;
   } catch (error) { return failure(error); }
 }

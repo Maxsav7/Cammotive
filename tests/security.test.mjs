@@ -57,7 +57,35 @@ test("no code trusts identity headers that a client or proxy could set", () => {
     assert.doesNotMatch(readFileSync(file, "utf8"), /oai-authenticated-user|x-user-email|x-authenticated-user/i, file);
 });
 
-for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
+test("the database Worker only runs queries for the site, with the right secret", async t => {
+  const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('test') } }", compatibilityDate: "2026-05-15", d1Databases: ["DB"] }));
+  t.after(() => mf.dispose());
+  const database = await mf.getD1Database("DB");
+  await database.prepare("CREATE TABLE notes (id INTEGER PRIMARY KEY, text TEXT)").run();
+  const worker = loader({})(resolve(root, "db-worker/index.ts")).default;
+  const secret = "s".repeat(40);
+  const call = (body, { auth = `Bearer ${secret}`, method = "POST", path = "/query", env = { DB: database, DB_PROXY_SECRET: secret } } = {}) =>
+    worker.fetch(new Request(`https://camotive-db.example.workers.dev${path}`, { method, headers: { authorization: auth, "content-type": "application/json" }, body: method === "POST" ? JSON.stringify(body) : undefined }), env);
+  const insert = { sql: "INSERT INTO notes (text) VALUES (?)", params: ["hello"] };
+  assert.equal((await call(insert, { auth: "Bearer wrong" })).status, 401);
+  assert.equal((await call(insert, { auth: "" })).status, 401);
+  assert.equal((await call(insert, { env: { DB: database, DB_PROXY_SECRET: "short" }, auth: "Bearer short" })).status, 401, "a weak secret is never accepted");
+  assert.equal((await call(insert, { method: "GET" })).status, 404);
+  assert.equal((await call(insert, { path: "/other" })).status, 404);
+  assert.equal((await call({ batch: [] })).status, 400);
+  assert.equal((await call({ sql: 42 })).status, 400);
+  assert.equal(Number((await database.prepare("SELECT count(*) AS n FROM notes").first()).n), 0, "nothing ran without the secret");
+  const one = await (await call(insert)).json();
+  assert.equal(one.success, true);
+  const batch = await (await call({ batch: [insert, { sql: "SELECT text FROM notes", params: [] }] })).json();
+  assert.equal(batch.result.length, 2); assert.deepEqual(batch.result[1].results, [{ text: "hello" }, { text: "hello" }]);
+  const failed = await call({ batch: [insert, { sql: "INSERT INTO missing VALUES (1)", params: [] }] });
+  assert.equal(failed.status, 400);
+  assert.doesNotMatch(await failed.text(), /missing/, "database errors aren't echoed back");
+  assert.equal(Number((await database.prepare("SELECT count(*) AS n FROM notes").first()).n), 2, "a failed batch changes nothing");
+});
+
+for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
   test(`booking security parity: ${runtime}`, async t => {
     const originalFetch = globalThis.fetch; const originalEnv = { ...process.env };
     Object.assign(process.env, {
@@ -69,6 +97,8 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       CLOUDFLARE_ACCOUNT_ID: "test", CLOUDFLARE_D1_DATABASE_ID: "test", CLOUDFLARE_D1_API_TOKEN: "synthetic",
       STRIPE_SECRET_KEY: "sk_test_synthetic0000", STRIPE_WEBHOOK_SECRET: "whsec_synthetic00000",
     });
+    // The same suite with every query sent through the database Worker instead of Cloudflare's API.
+    if (runtime === "vercel-worker") Object.assign(process.env, { D1_PROXY_URL: "https://camotive-db.example.workers.dev", D1_PROXY_SECRET: "synthetic-proxy-secret-".repeat(2) });
     const mf = new Miniflare(convertV4MiniflareOptions({ modules: true, script: "export default { fetch() { return new Response('test') } }", compatibilityDate: "2026-05-15", d1Databases: ["DB"] }));
     t.after(() => mf.dispose());
     const database = await mf.getD1Database("DB");
@@ -86,7 +116,15 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     // A throwaway key generated per run; the PEM label is split so the secret scanner ignores it.
     const pemLabel = edge => `-----${edge} PRIVATE` + " KEY-----";
     const googlePem = `${pemLabel("BEGIN")}\\n${Buffer.from(await crypto.subtle.exportKey("pkcs8", googleKeys.privateKey)).toString("base64").match(/.{1,64}/g).join("\\n")}\\n${pemLabel("END")}\\n`;
+    const dbWorker = runtime === "vercel-worker" ? loader({})(resolve(root, "db-worker/index.ts")).default : null;
     globalThis.fetch = async (url, options) => {
+      if (dbWorker && String(url).startsWith("https://camotive-db.example.workers.dev/")) {
+        if (dbFailure) return Response.json({ success: false }, { status: 503 });
+        assert.equal(options.cache, "no-store");
+        if (failOutboxInsert && JSON.stringify(JSON.parse(options.body).batch ?? [JSON.parse(options.body)]).includes("INSERT INTO booking_outbox")) return Response.json({ success: false }, { status: 500 });
+        return dbWorker.fetch(new Request(String(url), options), { DB: database, DB_PROXY_SECRET: process.env.D1_PROXY_SECRET });
+      }
+      if (runtime === "vercel-worker" && String(url).startsWith("https://api.cloudflare.com/")) throw new Error("Cloudflare's API was called instead of the Worker");
       if (String(url).startsWith("https://api.cloudflare.com/")) {
         dbCalls++;
         assert.equal(options.cache, "no-store");
@@ -225,6 +263,8 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       return result;
     };
     const run = async () => (await (await maintenance.POST(new Request("https://booking.example.com/api/internal/booking-maintenance", { method: "POST", headers: { authorization: `Bearer ${process.env.BOOKING_CRON_SECRET}` } }))).json());
+    // The dashboard session, as the browser would send it back: "name=value" from Set-Cookie.
+    const adminCookie = response => response.headers.get("set-cookie")?.split(";")[0];
     const post = (handler, url, body, headers = {}) => handler(new Request(`https://booking.example.com${url}`, { method: "POST", headers: { origin: "https://booking.example.com", "content-type": "application/json", ...headers }, body: JSON.stringify(body) }));
     const withGoogle = async run => {
       Object.assign(process.env, { GOOGLE_SERVICE_ACCOUNT_EMAIL: "camotive@test.iam.gserviceaccount.com", GOOGLE_SERVICE_ACCOUNT_KEY: googlePem, GOOGLE_CALENDAR_ID: "cam@example.com" });
@@ -680,8 +720,8 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         await ask("owner@example.com");
         const fresh = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%' ORDER BY rowid DESC").first()).payload)).subject.slice(0, 6);
         const ok = await signIn("owner@example.com", fresh); assert.equal(ok.status, 201);
-        const session = (await ok.json()).session;
-        const view = token => dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: token ? { authorization: `Bearer ${token}` } : {} }));
+        const session = adminCookie(ok);
+        const view = cookie => dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: cookie ? { cookie } : {} }));
         assert.equal((await view()).status, 401);
         const data = await (await view(session)).json();
         assert.equal(data.upcoming.length, 1); assert.equal(data.upcoming[0].phone, "+12105550123"); assert.equal(data.upcoming[0].address, "100 Synthetic Street");
@@ -690,7 +730,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         await post(signinCode.POST, "/api/account/code", { email: "audit@example.com", turnstileToken: "valid-recovery" });
         const customerOtp = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'signin-%'").first()).payload)).subject.slice(0, 6);
         const customer = (await (await post(signin.POST, "/api/account/session", { email: "audit@example.com", code: customerOtp })).json()).session;
-        assert.equal((await view(customer)).status, 401);
+        assert.equal((await view(`__Host-camotive-admin=${customer}`)).status, 401);
         // Removing the owner's address ends its sessions.
         process.env.CAM_BOOKING_EMAIL = "someone-else@example.com";
         assert.equal((await view(session)).status, 401);
@@ -700,11 +740,11 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       const adminSession = async () => {
         await post(adminCode.POST, "/api/admin/code", { email: "owner@example.com", turnstileToken: "valid-recovery" });
         const otp = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%' ORDER BY rowid DESC").first()).payload)).subject.slice(0, 6);
-        return (await (await post(adminSignin.POST, "/api/admin/session", { email: "owner@example.com", code: otp, newPassword: "correct horse battery" })).json()).session;
+        return adminCookie(await post(adminSignin.POST, "/api/admin/session", { email: "owner@example.com", code: otp, newPassword: "correct horse battery" }));
       };
       await t.test("dashboard password: set with an emailed code, sign in, change, sign out, sign out everywhere", async () => {
         await reset();
-        const view = token => dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { authorization: `Bearer ${token}` } }));
+        const view = cookie => dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { cookie } }));
         const login = (email, password) => post(adminSignin.POST, "/api/admin/session", { email, password });
         // No password yet: nothing can sign in.
         assert.equal((await login("owner@example.com", "correct horse battery")).status, 401);
@@ -718,23 +758,23 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.ok(emails.some(e => /dashboard password was changed/.test(e.subject)) || await database.prepare("SELECT 1 FROM booking_outbox WHERE id LIKE 'admin-password-%'").first(), "owner is told");
         // Everyday sign-in with the password; wrong password and strangers get the same answer.
         const good = await login("Owner@Example.com", "correct horse battery"); assert.equal(good.status, 201);
-        const second = (await good.json()).session;
+        const second = adminCookie(good);
         const bad = await login("owner@example.com", "wrong horse battery"), stranger = await login("audit@example.com", "correct horse battery");
         assert.equal(bad.status, 401); assert.deepEqual(await bad.json(), await stranger.json());
         assert.equal((await view(first)).status, 200); assert.equal((await view(second)).status, 200);
         // Change password: needs the current one, keeps this session, ends the others.
-        const change = (token, currentPassword, newPassword) => post(adminPassword.POST, "/api/admin/password", { currentPassword, newPassword }, { authorization: `Bearer ${token}` });
+        const change = (cookie, currentPassword, newPassword) => post(adminPassword.POST, "/api/admin/password", { currentPassword, newPassword }, { cookie });
         assert.equal((await change(second, "not my password", "a brand new passphrase")).status, 401);
         assert.equal((await change(second, "correct horse battery", "a brand new passphrase")).status, 200);
         assert.equal((await view(second)).status, 200); assert.equal((await view(first)).status, 401, "other devices signed out");
         assert.equal((await login("owner@example.com", "correct horse battery")).status, 401);
-        const third = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
+        const third = adminCookie(await login("owner@example.com", "a brand new passphrase"));
         // Sign out ends the session on the server, not just on the device.
-        const out = (token, everywhere = false) => adminSignin.DELETE(new Request(`https://booking.example.com/api/admin/session${everywhere ? "?everywhere=1" : ""}`, { method: "DELETE", headers: { origin: "https://booking.example.com", authorization: `Bearer ${token}` } }));
-        assert.equal((await adminSignin.DELETE(new Request("https://booking.example.com/api/admin/session", { method: "DELETE", headers: { origin: "https://evil.example", authorization: `Bearer ${third}` } }))).status, 403);
+        const out = (cookie, everywhere = false) => adminSignin.DELETE(new Request(`https://booking.example.com/api/admin/session${everywhere ? "?everywhere=1" : ""}`, { method: "DELETE", headers: { origin: "https://booking.example.com", cookie } }));
+        assert.equal((await adminSignin.DELETE(new Request("https://booking.example.com/api/admin/session", { method: "DELETE", headers: { origin: "https://evil.example", cookie: third } }))).status, 403);
         assert.equal((await out(third)).status, 200);
         assert.equal((await view(third)).status, 401); assert.equal((await view(second)).status, 200);
-        const fourth = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
+        const fourth = adminCookie(await login("owner@example.com", "a brand new passphrase"));
         assert.equal((await out(fourth, true)).status, 200);
         assert.equal((await view(fourth)).status, 401); assert.equal((await view(second)).status, 401, "sign out everywhere");
         // Repeated sign-ins from one address are rate limited (10 an hour per account and address), including correct ones.
@@ -743,20 +783,41 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.equal(repeated, 429);
         await database.prepare("DELETE FROM booking_limits").run(); store.fullLimits.clear(); // the hour passes
         // Active sessions renew: an old session is extended when used.
-        const fifth = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
+        const fifth = adminCookie(await login("owner@example.com", "a brand new passphrase"));
         await database.prepare("UPDATE customer_sessions SET expires = ?").bind(Math.floor(Date.now() / 1000) + 3600).run();
         assert.equal((await view(fifth)).status, 200);
         const renewed = Number((await database.prepare("SELECT max(expires) AS e FROM customer_sessions").first()).e);
         assert.ok(renewed > Math.floor(Date.now() / 1000) + 29 * 86400, "renewed to 30 days");
+      });
+      await t.test("the dashboard session is a cookie page scripts can't read, and only the cookie works", async () => {
+        await reset();
+        await post(adminCode.POST, "/api/admin/code", { email: "owner@example.com", turnstileToken: "valid-recovery" });
+        const otp = (await security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE 'admin-signin-%' ORDER BY rowid DESC").first()).payload)).subject.slice(0, 6);
+        const response = await post(adminSignin.POST, "/api/admin/session", { email: "owner@example.com", code: otp, newPassword: "correct horse battery" });
+        assert.equal(response.status, 201);
+        const setCookie = response.headers.get("set-cookie") ?? "";
+        assert.match(setCookie, /^__Host-camotive-admin=[a-f0-9]{64}; /);
+        for (const flag of ["Path=/", "HttpOnly", "Secure", "SameSite=Strict", "Max-Age=2592000"]) assert.ok(setCookie.split("; ").includes(flag), flag);
+        const cookie = setCookie.split(";")[0], token = cookie.split("=")[1];
+        assert.ok(!(await response.text()).includes(token), "the token isn't in the response body");
+        const view = headers => dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers }));
+        assert.equal((await view({ authorization: `Bearer ${token}` })).status, 401, "the token doesn't work as a header");
+        const ok = await view({ cookie: `theme=dark; ${cookie}` });
+        assert.equal(ok.status, 200);
+        assert.match(ok.headers.get("set-cookie") ?? "", /^__Host-camotive-admin=[a-f0-9]{64}; .*Max-Age=2592000/, "using the dashboard keeps him signed in");
+        const out = await adminSignin.DELETE(new Request("https://booking.example.com/api/admin/session", { method: "DELETE", headers: { origin: "https://booking.example.com", cookie } }));
+        assert.equal(out.status, 200);
+        assert.match(out.headers.get("set-cookie") ?? "", /^__Host-camotive-admin=; .*Max-Age=0/, "signing out clears the cookie");
+        assert.equal((await view({ cookie })).status, 401);
       });
       await t.test("dashboard: move a booking, cancel with refund, block time, and track quotes", async () => {
         await reset();
         const first = await book();
         const other = await book({ ...valid(), time: "12:00 PM", email: "other@example.com", phone: "2105550140" });
         const session = await adminSession();
-        const act = body => post(dashboard.POST, "/api/admin/dashboard", body, { authorization: `Bearer ${session}` });
+        const act = body => post(dashboard.POST, "/api/admin/dashboard", body, { cookie: session });
         assert.equal((await post(dashboard.POST, "/api/admin/dashboard", { action: "cancel", code: first.confirmationCode })).status, 401);
-        assert.equal((await post(dashboard.POST, "/api/admin/dashboard", { action: "cancel", code: first.confirmationCode }, { authorization: `Bearer ${session}`, origin: "https://evil.example" })).status, 403);
+        assert.equal((await post(dashboard.POST, "/api/admin/dashboard", { action: "cancel", code: first.confirmationCode }, { cookie: session, origin: "https://evil.example" })).status, 403);
         // Move: not onto a booked window; then to an open one, emailing the customer an updated invite.
         assert.equal((await act({ action: "reschedule", code: first.confirmationCode, date: valid().date, time: "12:00 PM" })).status, 409);
         assert.equal((await act({ action: "reschedule", code: first.confirmationCode, date: chicagoDay(-1), time: "4:00 PM" })).status, 400, "not into the past");
@@ -786,10 +847,10 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", email: "quote@example.com", phone: "2105550126", timing: "", notes: "White paint", turnstileToken: "valid-quote" };
         const { reference } = await (await quote.POST(request(body))).json();
         assert.ok(!JSON.stringify(await database.prepare("SELECT * FROM quote_requests").first()).includes("Mach-E"), "stored encrypted");
-        let data = await (await dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { authorization: `Bearer ${session}` } }))).json();
+        let data = await (await dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { cookie: session } }))).json();
         assert.equal(data.quotes[0].reference, reference); assert.equal(data.quotes[0].vehicle, "2023 Mustang Mach-E"); assert.equal(data.quotes[0].status, "new");
         assert.equal((await act({ action: "quote", reference, status: "replied" })).status, 200);
-        data = await (await dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { authorization: `Bearer ${session}` } }))).json();
+        data = await (await dashboard.GET(new Request("https://booking.example.com/api/admin/dashboard", { headers: { cookie: session } }))).json();
         assert.equal(data.quotes[0].status, "replied");
         assert.equal(data.upcoming[0].moved, true); assert.equal(data.recent[0].status, "cancelled");
       });
@@ -799,8 +860,8 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         process.env.BOOKING_ENABLED = "false"; process.env.STRIPE_SECRET_KEY = "";
         try {
           const session = await adminSession();
-          assert.match(session, /^[a-f0-9]{64}$/);
-          assert.equal((await post(dashboard.POST, "/api/admin/dashboard", { action: "block", date: chicagoDay(5), times: ["all"] }, { authorization: `Bearer ${session}` })).status, 200);
+          assert.match(session, /^__Host-camotive-admin=[a-f0-9]{64}$/);
+          assert.equal((await post(dashboard.POST, "/api/admin/dashboard", { action: "block", date: chicagoDay(5), times: ["all"] }, { cookie: session })).status, 200);
           assert.deepEqual((await slots(chicagoDay(5), 1)).days[0].slots.map(s => s.state), ["taken", "taken", "taken"], "the text-booking calendar honors blocks");
           assert.equal((await route.POST(request(valid()))).status, 503, "online booking itself stays off");
         } finally { process.env.BOOKING_ENABLED = saved.enabled; process.env.STRIPE_SECRET_KEY = saved.stripe; }
@@ -863,10 +924,31 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.equal((await login("wrong horse battery", "203.0.113.7")).status, 429, "that address is slowed down");
         assert.equal((await login("correct horse battery", "198.51.100.4")).status, 201, "the owner can still sign in");
       });
-      if (runtime === "vercel-rest") await t.test("REST database failure doesn't permit booking", async () => {
+      await t.test("one address can send at most 10 quote requests a day", async () => {
+        await reset();
+        const body = { service: "ceramic", vehicle: "2023 Mustang Mach-E", name: "Quote Customer", phone: "2105550126", timing: "Next month", notes: "", turnstileToken: "valid-quote" };
+        // Five an hour per address, so the requests are spread over three hours of one day.
+        const realNow = Date.now, day = Math.floor(realNow() / 86400000) * 86400000;
+        try {
+          for (let i = 0; i < 11; i++) {
+            Date.now = () => day + 3600000 * (1 + Math.floor(i / 5)) + 1000 * i;
+            const response = await quote.POST(request({ ...body, email: `quote${i}@example.com` }));
+            assert.equal(response.status, i < 10 ? 201 : 429, `quote ${i + 1}`);
+          }
+        } finally { Date.now = realNow; }
+      });
+      await t.test("a full rate limit is logged once, by name, with nothing about who hit it", async st => {
+        await reset();
+        const warn = st.mock.method(console, "warn", () => {});
+        for (let i = 0; i < 2; i++) await store.limit("signal", "person@example.com", 2);
+        for (let i = 0; i < 3; i++) await assert.rejects(store.limit("signal", "person@example.com", 2), { status: 429 });
+        const lines = warn.mock.calls.map(c => c.arguments.join(" "));
+        assert.deepEqual(lines, [JSON.stringify({ event: "rate_limit_reached", scope: "signal" })]);
+      });
+      if (runtime !== "cloudflare-binding") await t.test("database request failure doesn't permit booking", async () => {
         await reset(); dbFailure = true; assert.equal((await route.POST(request(valid()))).status, 503);
       });
-      if (runtime === "vercel-rest") await t.test("if queuing the confirmation fails, Stripe's retry delivers it", async () => {
+      if (runtime !== "cloudflare-binding") await t.test("if queuing the confirmation fails, Stripe's retry delivers it", async () => {
         await reset(); const { confirmationCode: code } = await (await route.POST(request(valid()))).json();
         failOutboxInsert = true;
         const session = Object.assign(sessionFor(code), { status: "complete", payment_status: "paid", payment_intent: "pi_test_retry" });

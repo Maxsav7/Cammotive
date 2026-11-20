@@ -1,0 +1,17 @@
+// The database Worker (see index.ts). Deploy from the repository folder:
+//   npx wrangler deploy --config db-worker/wrangler.jsonc
+// then set its secret (the same value goes into Vercel as D1_PROXY_SECRET):
+//   npx wrangler secret put DB_PROXY_SECRET --config db-worker/wrangler.jsonc
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "camotive-db",
+  "main": "index.ts",
+  "account_id": "954d2a4d3ac62409ac624e17ca84203a",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "camotive-bookings", "database_id": "72293293-e5d1-4ba5-ac1a-d394a161896f" }
+  ]
+}

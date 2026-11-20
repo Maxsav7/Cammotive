@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { connection } from "next/server";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,6 +15,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#121117" };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+// Every page is rendered per request, so each gets a fresh script nonce (see proxy.ts).
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  await connection();
   return <html lang="en"><head><link rel="preload" href="/fonts/archivo-wdth.woff2" as="font" type="font/woff2" crossOrigin="" /></head><body>{children}</body></html>;
 }

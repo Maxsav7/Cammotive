@@ -5,6 +5,8 @@
 // the last 30 days, blocking off time, and quote requests.
 // The session lasts 30 days and renews while in use, so Cam stays signed in on his
 // phone. Signing out ends it on the server; "Sign out of all devices" ends them all.
+// The session itself is a cookie this page's scripts can't read: the browser sends
+// it with each request, and nothing here ever sees or stores the token.
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import BookingChallenge from "./BookingChallenge";
 import Logo from "./Logo";
@@ -19,12 +21,11 @@ type Data = { today: string; upcoming: Job[]; recent: Job[]; blocks: { date: str
 type Status = { enabled: boolean; dashboard?: boolean; siteKey?: string | null };
 type Slot = (typeof bookingTimes)[number];
 
-const KEY = "camotive-admin";
 const EMAIL_KEY = "camotive-admin-email";
 const rememberEmail = (value: string) => { try { localStorage.setItem(EMAIL_KEY, value); } catch {} };
 const rememberedEmail = () => { try { return localStorage.getItem(EMAIL_KEY) ?? ""; } catch { return ""; } };
-const remember = (value: string | null) => { try { if (value) localStorage.setItem(KEY, value); else localStorage.removeItem(KEY); } catch {} };
-const remembered = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
+// Earlier versions kept the session token here; it no longer works, so drop it.
+const forgetOldToken = () => { try { localStorage.removeItem("camotive-admin"); } catch {} };
 const shift = (iso: string, days: number) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
 const fmt = (iso: string, opts: Intl.DateTimeFormatOptions = { weekday: "long", month: "long", day: "numeric" }) =>
   new Intl.DateTimeFormat("en-US", { ...opts, timeZone: "UTC" }).format(new Date(`${iso}T12:00:00Z`));
@@ -34,7 +35,7 @@ const service = (j: { packageName: string; addOns: string }) => `${j.packageName
 
 export default function AdminDashboard() {
   const [status, setStatus] = useState<Status | null>(null);
-  const [session, setSession] = useState<string | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
   const [stage, setStage] = useState<"login" | "email" | "code" | "dash">("login");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -55,33 +56,34 @@ export default function AdminDashboard() {
   const [block, setBlock] = useState<{ date: string; times: string[] }>({ date: "", times: ["all"] });
   const [quoteFilter, setQuoteFilter] = useState<"new" | "all">("new");
 
-  const signOut = useCallback((note = "") => { remember(null); setSession(null); setData(null); setStage("login"); setPassword(""); setAccount(false); setMessage(note); }, []);
-  // Ends the session on the server too (or every session), then forgets it here.
+  const signOut = useCallback((note = "") => { setSignedIn(false); setData(null); setStage("login"); setPassword(""); setAccount(false); setMessage(note); }, []);
+  // Ends the session on the server (or every session) and clears the cookie.
   const endSession = useCallback(async (everywhere = false) => {
-    const token = remembered();
-    if (token) await fetch(`/api/admin/session${everywhere ? "?everywhere=1" : ""}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+    await fetch(`/api/admin/session${everywhere ? "?everywhere=1" : ""}`, { method: "DELETE", credentials: "same-origin" }).catch(() => {});
     signOut(everywhere ? "Signed out of all devices." : "");
   }, [signOut]);
 
-  const call = useCallback(async (token: string, method: "GET" | "POST", body?: unknown) => {
-    const response = await fetch("/api/admin/dashboard", { method, cache: "no-store",
-      headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  // `quiet`: checking for an existing session on arrival, so "please sign in" isn't news.
+  const call = useCallback(async (method: "GET" | "POST", body?: unknown, quiet = false) => {
+    const response = await fetch("/api/admin/dashboard", { method, cache: "no-store", credentials: "same-origin",
+      headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
     const result = await response.json().catch(() => ({}));
-    if (response.status === 401) { signOut(result.error); return null; }
+    if (response.status === 401) { signOut(quiet ? "" : result.error); return null; }
     if (!response.ok) throw new Error(result.error || "Something went wrong. Try again.");
     return result;
   }, [signOut]);
 
-  const load = useCallback(async (token: string) => {
-    const result = await call(token, "GET").catch(error => { setMessage(error.message); return null; });
-    if (result) { setData(result); setStage("dash"); }
+  const load = useCallback(async (quiet = false) => {
+    const result = await call("GET", undefined, quiet).catch(error => { setMessage(error.message); return null; });
+    if (result) { setSignedIn(true); setData(result); setStage("dash"); }
   }, [call]);
 
   useEffect(() => {
     fetch("/api/appointments/status", { cache: "no-store" }).then(r => r.json()).then(setStatus).catch(() => setStatus({ enabled: false }));
-    const saved = remembered();
+    forgetOldToken();
+    // Only a device that has signed in before checks for a session.
     const savedEmail = rememberedEmail();
-    queueMicrotask(() => { if (savedEmail) setEmail(savedEmail); if (saved) { setSession(saved); load(saved); } });
+    queueMicrotask(() => { if (savedEmail) { setEmail(savedEmail); load(true); } });
   }, [load]);
 
   // When moving a job, show which windows are free on the chosen day.
@@ -115,7 +117,7 @@ export default function AdminDashboard() {
       const response = await fetch("/api/admin/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code, newPassword }) });
       const result = await response.json();
       if (!response.ok) { setMessage(result.error || "That code isn't right."); return; }
-      rememberEmail(email); remember(result.session); setSession(result.session); setNewPassword(""); await load(result.session);
+      rememberEmail(email); setNewPassword(""); await load();
       setMessage("Password saved. Next time, sign in with your email and password.");
     } catch { setMessage("Connection interrupted. Try again."); }
     finally { setBusy(false); }
@@ -129,17 +131,17 @@ export default function AdminDashboard() {
       const response = await fetch("/api/admin/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const result = await response.json();
       if (!response.ok) { setMessage(result.error || "Couldn't sign in."); return; }
-      rememberEmail(email); remember(result.session); setSession(result.session); setPassword(""); await load(result.session);
+      rememberEmail(email); setPassword(""); await load();
     } catch { setMessage("Connection interrupted. Try again."); }
     finally { setBusy(false); }
   }
 
   async function changePassword(event: FormEvent) {
     event.preventDefault();
-    if (!session || busy) return;
+    if (!signedIn || busy) return;
     setBusy(true); setMessage("");
     try {
-      const response = await fetch("/api/admin/password", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session}` },
+      const response = await fetch("/api/admin/password", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword: change.current, newPassword: change.next }) });
       const result = await response.json().catch(() => ({}));
       if (response.status === 401 && !result.error?.startsWith("Your current")) { signOut(result.error); return; }
@@ -150,14 +152,14 @@ export default function AdminDashboard() {
   }
 
   async function act(body: Record<string, unknown>, success: string) {
-    if (!session || busy) return;
+    if (!signedIn || busy) return;
     setBusy(true); setMessage("");
     try {
-      const result = await call(session, "POST", body);
+      const result = await call("POST", body);
       if (!result) return;
       setOpen(null);
       setMessage(result.existingBookings ? `${success} Note: ${result.existingBookings} booking${result.existingBookings > 1 ? "s are" : " is"} already on that day; blocking doesn't cancel ${result.existingBookings > 1 ? "them" : "it"}.` : success);
-      await load(session);
+      await load();
     } catch (error) { setMessage((error as Error).message); }
     finally { setBusy(false); }
   }
@@ -288,7 +290,7 @@ export default function AdminDashboard() {
       <a className="brand" href="/" aria-label="Camotive Detailing website"><Logo /></a>
       <h1 className="admin-bar-title">Dashboard</h1>
       <div className="admin-bar-actions">
-        <button type="button" className="icon-button" disabled={busy} onClick={() => session && load(session)} aria-label="Refresh"><Icon d={icons.refresh} /><span className="label-wide">Refresh</span></button>
+        <button type="button" className="icon-button" disabled={busy} onClick={() => signedIn && load()} aria-label="Refresh"><Icon d={icons.refresh} /><span className="label-wide">Refresh</span></button>
         <button type="button" className="ghost-button" aria-expanded={account} aria-controls="admin-account" onClick={() => { setAccount(v => !v); setMessage(""); }}>Account</button>
         <button type="button" className="ghost-button" onClick={() => endSession()}>Sign out</button>
       </div>

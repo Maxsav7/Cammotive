@@ -16,6 +16,9 @@ export async function POST(request: Request) {
     if (!parsed.success) throw new HttpError(400, "Please check your vehicle and contact details.");
     const { turnstileToken, ...quote } = parsed.data;
     await verifyBot(turnstileToken, "quote");
+    // Each request emails two people, and all share one daily budget: no single
+    // address can use up more than a third of it.
+    await limitRequest(request, "quote-day", 10, 86400);
     await limit("quote-recipient", quote.email, 3, 86400);
     await limit("quote-budget", "global", 30, 86400);
     const reference = `Q-${token().slice(0, 8).toUpperCase()}`;
