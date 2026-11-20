@@ -110,7 +110,7 @@ test("the details step points out a mistyped phone number or email before going 
   await expect(page.getByRole("heading", { name: "Where is the car?" })).toBeVisible();
   await expect(phone).toHaveAttribute("aria-invalid", "true");
   await expect(phone).toBeFocused();
-  await expect(page.locator("#booking-phone-note")).toContainText("555 numbers aren't real");
+  await expect(page.locator("#booking-phone-note")).toHaveText("Invalid phone number.");
   // A likely typo gets a one-tap fix, but doesn't block.
   await page.getByRole("button", { name: "jim@gmail.com" }).click();
   await expect(email).toHaveValue("jim@gmail.com");
@@ -128,7 +128,7 @@ test("if the email's domain takes no email, the customer is sent back to fix it"
   const email = page.getByLabel("Email");
   await expect(page.getByRole("heading", { name: "Where is the car?" })).toBeVisible();
   await expect(email).toHaveAttribute("aria-invalid", "true");
-  await expect(page.locator("#booking-email-note")).toContainText("couldn't find an email service at nomail.example");
+  await expect(page.locator("#booking-email-note")).toHaveText("Invalid email address.");
   await email.fill("someone@example.com");
   await expect(email).not.toHaveAttribute("aria-invalid", "true");
   await page.getByRole("button", { name: "Next: review and pay" }).click();
@@ -287,7 +287,7 @@ test("request a ceramic coating quote", async ({ page, request }, testInfo) => {
   const send = page.getByRole("button", { name: "Request a quote" });
   await expect(send).toBeEnabled();
   await send.click();
-  await expect(page.locator("#quote-phone-note")).toContainText("not a toll-free number");
+  await expect(page.locator("#quote-phone-note")).toHaveText("Invalid phone number.");
   await page.getByRole("button", { name: email }).click();
   await expect(page.getByLabel("Email")).toHaveValue(email);
   await page.getByLabel("Mobile number").fill("(210) 393-0199");

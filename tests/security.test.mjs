@@ -54,16 +54,13 @@ test("migrations apply cleanly over the legacy hand-written schema", async t => 
 test("phone and email checks catch mistakes and obvious fakes", () => {
   const { phoneProblem, emailProblem, emailSuggestion } = loader({})(resolve(root, "lib/contact-checks.ts"));
   for (const ok of ["2103931934", "(210) 393-1934", "+1 210 393 1934", "1-210-393-1934", "210.393.1934", "726 200 4455"]) assert.equal(phoneProblem(ok), null, ok);
-  const phone = {
-    "210393193": /10-digit/, "21039319345": /10-digit/, "": /10-digit/, "abc2103931934": /digits/,
-    "2105550123": /555/, "8002345678": /toll-free/, "8882345678": /toll-free/, "9002345678": /toll-free/,
-    "1103931934": /area code/, "2113931934": /area code/, "2903931934": /area code/, "3703931934": /area code/,
-    "2101231934": /real US/, "2109111234": /real US/, "2222222222": /real US/,
-  };
-  for (const [input, problem] of Object.entries(phone)) assert.match(phoneProblem(input) ?? "", problem, input || "(empty)");
+  // Whatever the reason, the customer just sees that it's invalid.
+  for (const bad of ["210393193", "21039319345", "", "abc2103931934", "2105550123", "8002345678", "8882345678", "9002345678",
+    "1103931934", "2113931934", "2903931934", "3703931934", "2101231934", "2109111234", "2222222222"])
+    assert.equal(phoneProblem(bad), "Invalid phone number.", bad || "(empty)");
   for (const ok of ["jim@gmail.com", "Jim.Smith+cars@Example.co.uk", "cam@camotivedetailing.com"]) assert.equal(emailProblem(ok), null, ok);
   for (const bad of ["", "jim", "jim@gmail", "jim@@gmail.com", "jim gmail.com", "jim@gmail..com", "@gmail.com", "jim@-gmail.com", "jim@gmail.c", `${"a".repeat(250)}@x.com`])
-    assert.ok(emailProblem(bad), bad || "(empty)");
+    assert.equal(emailProblem(bad), "Invalid email address.", bad || "(empty)");
   const suggestions = { "jim@gmial.com": "jim@gmail.com", "jim@gmail.con": "jim@gmail.com", "Jim@GNAIL.com": "Jim@gmail.com", "jim@yaho.com": "jim@yahoo.com",
     "jim@hotmal.com": "jim@hotmail.com", "jim@outlok.com": "jim@outlook.com", "jim@icloud.co": "jim@icloud.com", "jim@company.con": "jim@company.com" };
   for (const [typed, fixed] of Object.entries(suggestions)) assert.equal(emailSuggestion(typed), fixed, typed);
@@ -961,11 +958,11 @@ for (const runtime of ["vercel-rest", "vercel-worker", "cloudflare-binding"]) {
           return { ...(await response.json()), status: response.status };
         };
         const fake = await attempt({ phone: "(210) 555-0123" });
-        assert.equal(fake.status, 400); assert.equal(fake.field, "phone"); assert.match(fake.error, /555/);
+        assert.equal(fake.status, 400); assert.equal(fake.field, "phone"); assert.equal(fake.error, "Invalid phone number.");
         assert.equal((await attempt({ phone: "800-234-5678" })).field, "phone");
         assert.equal((await attempt({ phone: "210 123 4567" })).field, "phone");
         const nomail = await attempt({ email: "jim@nomail.example" });
-        assert.equal(nomail.status, 400); assert.equal(nomail.field, "email"); assert.match(nomail.error, /nomail\.example/);
+        assert.equal(nomail.status, 400); assert.equal(nomail.field, "email"); assert.equal(nomail.error, "Invalid email address.");
         assert.equal((await attempt({ email: "jim@nullmx.example" })).field, "email");
         assert.equal(await count("secure_bookings"), 0, "nothing was booked");
         // A DNS outage never stops a real customer.

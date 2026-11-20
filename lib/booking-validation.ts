@@ -25,8 +25,8 @@ const check = (problem: (value: string) => string | null) => (value: string, ctx
   const message = problem(value);
   if (message) ctx.addIssue({ code: "custom", message });
 };
-const contactEmail = z.string().max(254, "Enter a shorter email address.").superRefine(check(emailProblem)).transform(v => v.trim().toLowerCase());
-const contactPhone = z.string().max(30, "Enter a 10-digit US mobile number.").superRefine(check(phoneProblem)).transform(v => `+1${phoneDigits(v)}`);
+const contactEmail = z.string().max(254, "Invalid email address.").superRefine(check(emailProblem)).transform(v => v.trim().toLowerCase());
+const contactPhone = z.string().max(30, "Invalid phone number.").superRefine(check(phoneProblem)).transform(v => `+1${phoneDigits(v)}`);
 // A form that failed on the email or phone says which, so the page can point at it.
 export function contactError(error: z.ZodError) {
   const issue = error.issues.find(i => i.path[0] === "email" || i.path[0] === "phone");

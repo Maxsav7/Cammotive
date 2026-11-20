@@ -10,19 +10,23 @@ export function phoneDigits(raw: string) {
   return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
 }
 
+// Customers see one plain message, whatever the reason.
+const INVALID_PHONE = "Invalid phone number.", INVALID_EMAIL = "Invalid email address.";
+
 // US numbers follow the North American Numbering Plan: area code and exchange each
 // start 2–9, area codes never have 9 in the middle or end in 11 (those are 911-style
-// service codes), and 37X and 96X are held in reserve. 555 numbers are fictional.
+// service codes), and 37X and 96X are held in reserve. Also refused: 555 numbers
+// (fictional), toll-free and 900 numbers (they can't receive texts), and one digit
+// repeated ten times.
 export function phoneProblem(raw: string): string | null {
-  if (/[^\d\s().+-]/.test(raw)) return "Use digits only, like (210) 000-0000.";
+  if (/[^\d\s().+-]/.test(raw)) return INVALID_PHONE;
   const digits = phoneDigits(raw);
-  if (digits.length !== 10) return "Enter a 10-digit US mobile number.";
+  if (digits.length !== 10) return INVALID_PHONE;
   const area = digits.slice(0, 3), exchange = digits.slice(3, 6);
-  if (/^8(00|33|44|55|66|77|88)$/.test(area) || area === "900") return "Use a mobile number we can text, not a toll-free number.";
-  if (!/^[2-9][0-8]\d$/.test(area) || area.endsWith("11") || /^(37|96)/.test(area)) return `Check the area code: ${area} isn't used for US phone numbers.`;
-  if (exchange === "555") return "555 numbers aren't real. Enter your mobile number.";
-  if (!/^[2-9]\d\d$/.test(exchange) || exchange.endsWith("11") || /^(\d)\1{9}$/.test(digits)) return "That isn't a real US phone number. Check the digits.";
-  return null;
+  const tollFree = /^8(00|33|44|55|66|77|88)$/.test(area) || area === "900";
+  const badArea = !/^[2-9][0-8]\d$/.test(area) || area.endsWith("11") || /^(37|96)/.test(area);
+  const badExchange = !/^[2-9]\d\d$/.test(exchange) || exchange.endsWith("11") || exchange === "555";
+  return tollFree || badArea || badExchange || /^(\d)\1{9}$/.test(digits) ? INVALID_PHONE : null;
 }
 
 // As customers expect to see it: (210) 393-1934.
@@ -34,11 +38,10 @@ export function formatPhone(raw: string) {
 // Something before the @, then a domain of dot-separated labels (letters, digits,
 // inner hyphens) ending in a top-level domain of two or more letters.
 const EMAIL = /^[^\s@]+@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+export const invalidEmail = INVALID_EMAIL;
 export function emailProblem(raw: string): string | null {
   const email = raw.trim();
-  if (!email) return "Enter your email address.";
-  if (email.length > 254 || !EMAIL.test(email) || email.includes("..")) return "Enter a full email address, like name@gmail.com.";
-  return null;
+  return !email || email.length > 254 || !EMAIL.test(email) || email.includes("..") ? INVALID_EMAIL : null;
 }
 
 // Where most customers' email lives; a domain one or two typing slips away from one

@@ -5,6 +5,7 @@
 // If the lookup fails or times out, the answer is "yes": an outage at the DNS
 // provider must never stop a real customer from booking.
 import { HttpError } from "./booking-security";
+import { invalidEmail } from "./contact-checks";
 import { dnsApi } from "./providers";
 
 type Answer = { Status: number; Answer?: { type: number; data: string }[] };
@@ -47,8 +48,5 @@ export async function emailDomainAccepts(email: string) {
 }
 
 export async function checkEmailDomain(email: string) {
-  if (await emailDomainAccepts(email))
-    return;
-  const domain = email.slice(email.lastIndexOf("@") + 1);
-  throw new HttpError(400, `We couldn't find an email service at ${domain}. Check the spelling of your email address.`, "email");
+  if (!await emailDomainAccepts(email)) throw new HttpError(400, invalidEmail, "email");
 }
