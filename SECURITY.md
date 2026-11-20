@@ -161,15 +161,23 @@ Do not expose a Worker origin bypassing its expected Cloudflare ingress.
 
 ## Headers and release checks
 
-Both builds enforce anti-framing, nosniff, no-referrer, restricted permissions,
-HSTS, and a basic CSP. A stricter script/style CSP is report-only pending a
-compatible nonce strategy for Next/Vinext inline hydration. This is explicitly
-not a complete enforced XSS policy; inspect browser violations before tightening.
+Both builds enforce anti-framing, nosniff, no-referrer, restricted permissions
+and HSTS. Pages enforce a content security policy with a fresh nonce per request
+(`proxy.ts`, `lib/security-headers.ts`): only scripts carrying the nonce run, plus
+what they load themselves (`'strict-dynamic'`, used by the Turnstile script), so
+injected markup (`<script>`, inline event handlers, `javascript:` links) doesn't
+run. Pages are therefore rendered per request rather than prebuilt. Inline styles
+are allowed. API responses carry a base policy. The browser suites fail on any
+policy violation, and `tests/rendered-html.test.mjs` checks the nonce on both
+builds.
+
+Cam's dashboard session is an HttpOnly, SameSite=Strict cookie (`__Host-` and
+Secure on HTTPS); the token never reaches page scripts or browser storage.
 
 Run `npm run test:security`, `npm test`, `npm run test:vercel`,
 `npm run security:secrets`, and `npm audit --audit-level=high` before release.
-The security suite executes real handlers against local workerd D1 through both
-the binding and an intercepted REST adapter. No real messages or customer data
+The security suite executes real handlers against local workerd D1 through the
+binding, an intercepted REST adapter, and the database Worker (`db-worker/`). No real messages or customer data
 are used. Remote D1 transport and platform firewall settings still need staging
 verification. Keep owner MFA, branch protection, secret scanning/push protection,
 provider caps and backup restore checks enabled in their dashboards.

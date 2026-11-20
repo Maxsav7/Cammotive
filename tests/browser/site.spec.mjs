@@ -12,8 +12,8 @@ function watch(page) {
   const problems = [];
   page.on("pageerror", error => problems.push(`script error: ${error.message}`));
   page.on("console", message => {
-    // The stricter CSP is deliberately report-only for now (see SECURITY.md).
-    if (message.type() === "error" && !message.text().includes("[Report Only]")) problems.push(`console: ${message.text()}`);
+    // Includes content security policy violations: the policy is enforced, so any is a bug.
+    if (message.type() === "error") problems.push(`console: ${message.text()}`);
   });
   page.on("response", response => {
     if (response.url().startsWith("http://127.0.0.1") && response.status() >= 400 && !response.url().includes("not-a-camotive-page"))

@@ -139,6 +139,26 @@ test("unconfigured booking fails closed on either runtime", async () => {
   }
 });
 
+test("pages enforce a script policy with a fresh nonce on every request", async () => {
+  for (const path of ["/", "/book", "/admin", "/terms"]) {
+    const [first, second] = [await fetch(`${origin}${path}`), await fetch(`${origin}${path}`)];
+    const policy = first.headers.get("content-security-policy") ?? "";
+    const scriptSrc = /script-src [^;]*/.exec(policy)?.[0] ?? "";
+    const nonce = /'nonce-([A-Za-z0-9+/=_-]{16,})'/.exec(scriptSrc)?.[1];
+    assert.ok(nonce, `${path}: ${policy}`);
+    assert.match(scriptSrc, /'strict-dynamic'/, path);
+    assert.doesNotMatch(scriptSrc, /unsafe-inline|unsafe-eval/, path);
+    for (const directive of ["default-src 'self'", "object-src 'none'", "base-uri 'self'", "frame-ancestors 'none'", "form-action 'self'"])
+      assert.ok(policy.includes(directive), `${path}: ${directive}`);
+    assert.equal(first.headers.get("content-security-policy-report-only"), null, path);
+    assert.notEqual(/'nonce-([^']+)'/.exec(second.headers.get("content-security-policy") ?? "")?.[1], nonce, `${path}: nonce reused`);
+    const tags = [...(await first.text()).matchAll(/<script\b[^>]*>/g)].map(m => m[0]);
+    assert.ok(tags.length > 0, path);
+    for (const tag of tags) assert.ok(tag.includes(`nonce="${nonce}"`), `${path}: ${tag.slice(0, 120)}`);
+    await second.text();
+  }
+});
+
 test("security headers and private API cache policy are present", async () => {
   const response = await fetch(origin);
   assert.equal(response.headers.get("x-frame-options"), "DENY");

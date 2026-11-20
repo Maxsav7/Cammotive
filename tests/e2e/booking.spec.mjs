@@ -10,7 +10,12 @@ const fakes = "http://127.0.0.1:4186";
 
 // Turnstile's widget, replaced by one that passes immediately for the action asked.
 // Each test is also a new visitor as far as the per-address rate limits go.
+// Any content security policy violation (booking, Turnstile, checkout, dashboard) fails the test.
+let violations = [];
+test.afterEach(() => expect(violations).toEqual([]));
 test.beforeEach(async ({ page, request }) => {
+  violations = [];
+  page.on("console", message => { if (/Content Security Policy/i.test(message.text())) violations.push(message.text()); });
   await request.post(`${fakes}/__forget-limits`);
   await page.route("https://challenges.cloudflare.com/turnstile/v0/api.js*", route => route.fulfill({
     contentType: "text/javascript",
@@ -280,6 +285,12 @@ test("Cam's dashboard: sign in with an emailed code, move a job, block a day, re
   await page.getByLabel("New password").fill(password);
   await page.getByRole("button", { name: "Save password and sign in" }).click();
   await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  // The session is a cookie the page's scripts can't read, and isn't kept anywhere they can.
+  const sessionCookie = (await page.context().cookies()).find(c => c.name === "camotive-admin");
+  expect(sessionCookie?.value).toMatch(/^[a-f0-9]{64}$/);
+  expect(sessionCookie).toMatchObject({ httpOnly: true, sameSite: "Strict", path: "/" });
+  expect(await page.evaluate(() => document.cookie)).not.toContain("camotive-admin");
+  expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toMatch(/[a-f0-9]{64}/);
   // Sign out ends the session; signing back in uses the password, and the email is remembered.
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Dashboard sign-in" })).toBeVisible();

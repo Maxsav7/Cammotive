@@ -25,6 +25,8 @@ export async function limit(scope: string, identity: string, maximum: number, se
   if (!row) {
     if (fullLimits.size > 5000) for (const [k, ends] of fullLimits) if (ends <= now) fullLimits.delete(k);
     if (fullLimits.size <= 5000) fullLimits.set(key, (window + 1) * seconds);
+    // For alerts (see VERCEL.md): which limit, never who hit it.
+    console.warn(JSON.stringify({ event: "rate_limit_reached", scope }));
     throw new HttpError(429, TOO_MANY);
   }
 }

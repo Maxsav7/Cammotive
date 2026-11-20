@@ -136,7 +136,9 @@ comma-separated, in `ADMIN_EMAILS`).
   and chooses a password (10+ characters). Every other device is signed out and
   he gets a "password changed" email.
 - **Stays signed in** for 30 days, renewed whenever he uses it, so in practice
-  he only signs in again after a month away.
+  he only signs in again after a month away. The session is a cookie the page's
+  scripts can't read (HttpOnly, SameSite=Strict, HTTPS only); nothing is kept in
+  browser storage except his email, to fill in the sign-in form.
 - **Account** (top bar): change the password (needs the current one; signs out
   other devices) and **Sign out of all devices** for a lost phone. **Sign out**
   ends the session on the server, not just on that phone.
@@ -161,7 +163,7 @@ email, Turnstile and the secrets), so Cam can block off time now.
 Both go through the same queue (`booking_outbox`), so they share the retries below.
 
 1. Immediately after a booking (sent once the customer's response is returned).
-2. Retried whenever someone opens a booking page.
+2. Retried when someone opens a booking page (at most once a minute per server).
 3. Retried and cleaned up by Vercel Cron once a day (Hobby plans allow daily
    only). On Vercel Pro you can change the schedule in `vercel.json` to
    `*/5 * * * *`. On Hobby, for faster retries, add a free external scheduler
@@ -175,11 +177,48 @@ missed. Check Stripe → Developers → Webhooks for failed deliveries.
 Check Vercel logs for `booking_email_failed_count`, `booking_outbox_retry_required`,
 `google_calendar_busy_check_failed` and `booking_operation_failed`.
 
+### Alerts
+
+Two log lines are worth an alert, and neither contains personal details:
+
+- `booking_operation_failed`: a request failed on the server (database, Stripe,
+  email provider). A burst of these means booking is down.
+- `{"event":"rate_limit_reached","scope":"..."}`: someone hit a rate limit, logged
+  once per limit per server. Many of them in a few minutes, especially `create`,
+  `availability` or `admin-signin-attempts`, means a flood or a guessing attempt;
+  that's when to turn on Vercel's Attack Challenge Mode (Firewall).
+
+Search for them in the project's Logs in Vercel, or send logs to a service that
+alerts (a Vercel log drain). In Cam's Cloudflare dashboard, turn on Notifications
+for the account so problems with the database reach him by email.
+
 ## Changing the database
 
 Edit `db/schema.ts`, run `npm run db:generate`, commit the new file in
 `drizzle/`, and apply it with the `wrangler d1 execute` command above. CI fails
 if the schema and `drizzle/` disagree.
+
+## Database Worker (optional)
+
+On Vercel, every database query is a request to Cloudflare's API, which allows
+1,200 per 5 minutes for Cam's whole Cloudflare login (his dashboard included).
+The small Worker in `db-worker/` runs queries through the database binding
+instead, which doesn't count against that limit. The site uses it as soon as
+`D1_PROXY_URL` and `D1_PROXY_SECRET` are set in Vercel, and goes back to the API
+if they're removed. Setup, from the repository folder on a computer signed in to
+Cam's Cloudflare account (`npx wrangler login`):
+
+1. `npx wrangler deploy --config db-worker/wrangler.jsonc`. It prints the
+   Worker's address, `https://camotive-db.<subdomain>.workers.dev`.
+2. Make a secret: `openssl rand -hex 32`. Keep it out of chats and email.
+3. `npx wrangler secret put DB_PROXY_SECRET --config db-worker/wrangler.jsonc`
+   and paste the secret.
+4. In Vercel → Settings → Environment Variables (Production): `D1_PROXY_SECRET`
+   = the same secret (Sensitive), and `D1_PROXY_URL` = the Worker's address.
+5. Redeploy, then check `/api/appointments/status` still says `"enabled":true`.
+
+Keep the `CLOUDFLARE_*` variables: migrations and the fallback still use them.
+To rotate the secret, repeat steps 2 to 5.
 
 ## Before every deploy
 

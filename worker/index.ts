@@ -1,7 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { securityHeaders } from "../lib/security-headers";
+import { baseContentSecurityPolicy, securityHeaders } from "../lib/security-headers";
 
 interface Env {
   ASSETS: Fetcher;
@@ -44,6 +44,8 @@ const worker = {
     const response = await handler.fetch(request, env, ctx);
     const secured = new Response(response.body, response);
     for (const [key, value] of Object.entries(securityHeaders)) secured.headers.set(key, value);
+    // Pages already carry a policy with their nonce (proxy.ts); everything else gets the base one.
+    if (!secured.headers.has("content-security-policy")) secured.headers.set("content-security-policy", baseContentSecurityPolicy);
     return secured;
   },
 };

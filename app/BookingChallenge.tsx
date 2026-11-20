@@ -8,6 +8,8 @@ function loadScript() {
   if (!scriptReady) scriptReady = new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    // Cloudflare asks for the page's nonce on this tag; Turnstile passes it on to what it loads.
+    script.nonce = document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce ?? "";
     script.async = true; script.onload = () => resolve(); script.onerror = () => { script.remove(); reject(new Error("Security check unavailable")); };
     document.head.appendChild(script);
   }).catch(error => { scriptReady = undefined; throw error; });

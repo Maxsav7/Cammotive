@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { db, limitRequest, requireDashboard } from "@/lib/booking-store";
 import { failure, HttpError, json, readJson, unseal } from "@/lib/booking-security";
-import { requireAdmin } from "@/lib/admin-session";
+import { adminCookie, requireAdmin } from "@/lib/admin-session";
 import { cancelBooking, rescheduleBooking } from "@/lib/booking-payments";
 import { addDays, chicagoDay, isoDay } from "@/lib/booking-validation";
 import { bookingTimes, slotStart } from "@/lib/booking-catalog";
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   try {
     requireDashboard();
     await limitRequest(request, "admin-dashboard", 240);
-    await requireAdmin(request);
+    const { value } = await requireAdmin(request);
     const today = chicagoDay(), since = addDays(today, -30);
     const [rows, blocks, quotes] = await Promise.all([
       db.prepare(`SELECT b.code, b.date, b.time, b.status, b.details, b.created_at, p.deposit_cents, p.paid_at, p.refunded_at, p.cancelled_by
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         total: d.total, discount: d.discount ?? 0, deposit: Number(r.deposit_cents ?? 0) / 100, paid: Boolean(r.paid_at), refunded: Boolean(r.refunded_at),
         cancelledBy: r.cancelled_by ?? null, bookedAt: Number(r.created_at), moved: (d.sequence ?? 0) > 0 };
     }));
-    return json({
+    const response = json({
       today,
       upcoming: bookings.filter(b => b.status === "confirmed" && b.date >= today).sort(order),
       recent: bookings.filter(b => !(b.status === "confirmed" && b.date >= today)).sort((a, b) => order(b, a)),
@@ -41,6 +41,9 @@ export async function GET(request: Request) {
       quotes: await Promise.all((quotes.results ?? []).map(async q => ({ reference: q.reference, status: q.status, receivedAt: Number(q.created_at),
         ...(await unseal(String(q.details)) as QuoteDetails) }))),
     });
+    // The session renews while in use; so does the cookie that holds it.
+    response.headers.append("set-cookie", adminCookie(value));
+    return response;
   } catch (error) { return failure(error); }
 }
 
