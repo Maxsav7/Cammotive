@@ -9,22 +9,29 @@ import { test, expect } from "@playwright/test";
 const fakes = "http://127.0.0.1:4186";
 
 // Turnstile's widget, replaced by one that passes immediately for the action asked.
-test.beforeEach(async ({ page }) => {
+// Each test is also a new visitor as far as the per-address rate limits go.
+test.beforeEach(async ({ page, request }) => {
+  await request.post(`${fakes}/__forget-limits`);
   await page.route("https://challenges.cloudflare.com/turnstile/v0/api.js*", route => route.fulfill({
     contentType: "text/javascript",
     body: `window.turnstile = { render(el, o) { el.textContent = "Security check passed"; setTimeout(() => o.callback("test-" + o.action), 50); return "w"; }, remove() {} };`,
   }));
 });
 
-async function emailsTo(request, to, subject) {
+// Emails sent so far to `to` with a matching subject (and text, if given); waits until
+// there are more than `after`. Both device runs share one inbox, so checks for Cam's
+// emails say which booking or request they're about.
+async function emailsTo(request, to, subject, { after = 0, text } = {}) {
   let found = [];
   await expect.poll(async () => {
     const all = await (await request.get(`${fakes}/__emails`)).json();
-    found = all.filter(e => e.to.includes(to) && subject.test(e.subject));
+    found = all.filter(e => e.to.includes(to) && subject.test(e.subject) && (!text || e.text.includes(text)));
     return found.length;
-  }, { timeout: 15000 }).toBeGreaterThan(0);
+  }, { timeout: 15000 }).toBeGreaterThan(after);
   return found;
 }
+const countEmails = async (request, to, subject) =>
+  (await (await request.get(`${fakes}/__emails`)).json()).filter(e => e.to.includes(to) && subject.test(e.subject)).length;
 const calendarEvent = async (request, code) =>
   (await (await request.get(`${fakes}/__calendar`)).json()).find(e => e.id === `camotive${code.slice(4).toLowerCase()}`);
 const chicagoDay = offset => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date(Date.now() + offset * 86400000));
@@ -41,8 +48,8 @@ test("busy time on Cam's calendar can't be booked", async ({ page, request }) =>
   if (await day.count()) await expect(day).toHaveAttribute("data-state", "full");
 });
 
-// Walks the five booking steps and stops on the fake Stripe Checkout page.
-async function bookUntilCheckout(page, email, { service = "premium", addOn = true } = {}) {
+// Walks the five booking steps up to an enabled "Pay $50 deposit" button.
+async function fillBooking(page, email, { service = "premium", addOn = true } = {}) {
   await page.goto(`/book?service=${service}&size=medium`);
   await expect(page.getByRole("radio", { name: /Premium Detail|Full Detail/ }).first()).toBeVisible();
   await page.getByRole("button", { name: "Next: add-ons" }).click();
@@ -70,10 +77,42 @@ async function bookUntilCheckout(page, email, { service = "premium", addOn = tru
   await expect(page.locator('.agree a[href="/terms"]')).toBeVisible();
   await page.getByLabel(/non-refundable if I cancel/).check();
   await expect(pay).toBeEnabled();
+  return { dayName, when, pay };
+}
+// ...then pays, stopping on the fake Stripe Checkout page.
+async function bookUntilCheckout(page, email, options) {
+  const { dayName, when, pay } = await fillBooking(page, email, options);
   await pay.click();
   await expect(page.getByRole("heading", { name: "Fake Stripe Checkout" })).toBeVisible();
   return { dayName, when };
 }
+
+test("if a booking is refused, the customer sees why and can try again", async ({ page }, testInfo) => {
+  // The first try is refused (too many requests), the second finds the slot just taken.
+  const refusals = [
+    { status: 429, error: "Too many requests. Please try later or call Camotive." },
+    { status: 409, error: "That time was just taken. Please choose another slot." },
+  ];
+  await page.route("**/api/appointments", route => {
+    const refusal = route.request().method() === "POST" && refusals.shift();
+    return refusal ? route.fulfill({ status: refusal.status, contentType: "application/json", body: JSON.stringify({ error: refusal.error }) }) : route.fallback();
+  });
+  const { pay } = await fillBooking(page, `retry-${testInfo.project.name}@example.com`);
+  await pay.click();
+  await expect(page.locator(".form-error")).toContainText("Too many requests");
+  await expect(pay).toBeEnabled(); // a fresh security check, and the button works again
+  await pay.click();
+  await expect(page.locator(".form-error")).toContainText("just taken");
+  await page.locator(".slot-list button:not(:disabled)").first().click();
+  await page.getByRole("button", { name: "Next: your details" }).click();
+  await page.getByRole("button", { name: "Next: review and pay" }).click();
+  await expect(pay).toBeEnabled();
+  await pay.click();
+  await expect(page.getByRole("heading", { name: "Fake Stripe Checkout" })).toBeVisible();
+  // Leave without paying, so the slot isn't held for the tests after this one.
+  await page.getByRole("link", { name: "Back" }).click();
+  await expect(page.locator(".booking-notice")).toContainText("nothing was booked or charged");
+});
 const slotState = async (page, dayName, when) => {
   await page.goto("/book");
   await page.getByRole("button", { name: "Next: add-ons" }).click();
@@ -104,7 +143,7 @@ test("book with a deposit, view in My appointments, cancel and keep the deposit"
   expect(Buffer.from(booked.attachments[0].content, "base64").toString()).toContain("STATUS:CONFIRMED");
   const access = /(\/appointment#access=[a-f0-9]{64})/.exec(booked.text)?.[1];
   expect(access).toBeTruthy();
-  const [camEmail] = (await emailsTo(request, "cam@example.com", /^New booking:/)).filter(e => e.text.includes(code));
+  const [camEmail] = await emailsTo(request, "cam@example.com", /^New booking:/, { text: code });
   expect(camEmail.text).toContain("deposit is paid");
   await expect.poll(async () => Boolean(await calendarEvent(request, code)), { timeout: 15000 }).toBe(true);
   expect(await slotState(page, dayName, when)).toBe("taken");
@@ -141,7 +180,7 @@ test("book with a deposit, view in My appointments, cancel and keep the deposit"
 
   const [cancelled] = await emailsTo(request, email, /^Cancelled:/);
   expect(cancelled.text).toContain("non-refundable");
-  await emailsTo(request, "cam@example.com", /^Customer cancelled:/);
+  await emailsTo(request, "cam@example.com", /^Customer cancelled:/, { text: code });
   await expect.poll(async () => Boolean(await calendarEvent(request, code)), { timeout: 15000 }).toBe(false);
   const refunds = await (await request.get(`${fakes}/__refunds`)).json();
   expect(refunds.some(r => r["metadata[booking_code]"] === code)).toBe(false);
@@ -154,7 +193,7 @@ test("Cam cancels a paid booking and the deposit is refunded", async ({ page, re
   await page.getByRole("button", { name: "Pay $50.00" }).click();
   await expect(page.getByRole("heading", { name: "You're booked." })).toBeVisible();
   const code = (await page.locator(".done-summary dd").first().textContent())?.trim();
-  const [camEmail] = (await emailsTo(request, "cam@example.com", /^New booking:/)).filter(e => e.text.includes(code));
+  const [camEmail] = await emailsTo(request, "cam@example.com", /^New booking:/, { text: code });
   const link = /http:\/\/127\.0\.0\.1:\d+(\/manage#booking=[^\s]+)/.exec(camEmail.text)?.[1];
   await page.goto(link);
   await expect(page.locator(".status-pill")).toHaveText("Confirmed");
@@ -189,7 +228,7 @@ test("request a ceramic coating quote", async ({ page, request }, testInfo) => {
   const email = `quote-${testInfo.project.name}@example.com`;
   await page.goto("/quote?service=ceramic");
   await expect(page.getByRole("radio", { name: "Ceramic coating" })).toBeChecked();
-  await page.getByLabel("Vehicle").fill("2023 Tesla Model Y, white");
+  await page.getByLabel("Vehicle").fill(`2023 Tesla Model Y, white (${testInfo.project.name})`);
   await page.getByLabel("Full name").fill("Quote Customer");
   await page.getByLabel("Mobile number").fill("(210) 555-0199");
   await page.getByLabel("Email").fill(email);
@@ -198,8 +237,7 @@ test("request a ceramic coating quote", async ({ page, request }, testInfo) => {
   await send.click();
   await expect(page.getByRole("heading", { name: /reply within one business day/ })).toBeVisible();
   await emailsTo(request, email, /quote/i);
-  const cam = await emailsTo(request, "cam@example.com", /quote/i);
-  expect(cam.some(e => e.text.includes("2023 Tesla Model Y"))).toBe(true);
+  await emailsTo(request, "cam@example.com", /quote/i, { text: `2023 Tesla Model Y, white (${testInfo.project.name})` });
 });
 
 test("the homepage shows the next open time and links to it", async ({ page }) => {
@@ -233,9 +271,11 @@ test("Cam's dashboard: sign in with an emailed code, move a job, block a day, re
   await expect(page.getByRole("heading", { name: "Dashboard sign-in" })).toBeVisible();
   await page.getByRole("button", { name: /Forgot your password/ }).click();
   await page.getByLabel("Email").fill("cam@example.com");
+  // The other device's run already emailed Cam a code: wait for this one's.
+  const earlierCodes = await countEmails(request, "cam@example.com", /dashboard code/);
   await page.getByRole("button", { name: "Email me a code" }).click();
   await expect(page.getByLabel("6-digit code")).toBeVisible();
-  const [codeEmail] = (await emailsTo(request, "cam@example.com", /dashboard code/)).slice(-1);
+  const [codeEmail] = (await emailsTo(request, "cam@example.com", /dashboard code/, { after: earlierCodes })).slice(-1);
   await page.getByLabel("6-digit code").fill(codeEmail.subject.slice(0, 6));
   await page.getByLabel("New password").fill(password);
   await page.getByRole("button", { name: "Save password and sign in" }).click();
@@ -274,6 +314,9 @@ test("Cam's dashboard: sign in with an emailed code, move a job, block a day, re
   const blockDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date(Date.now() + (testInfo.project.name === "phone" ? 41 : 40) * 86400000));
   await page.getByLabel("Date").fill(blockDay);
   await page.getByRole("button", { name: "Block", exact: true }).click();
+  // The other device's run may already have a whole day listed, so wait for the
+  // confirmation that this block was saved.
+  await expect(page.locator(".admin-toast")).toContainText("Blocked");
   await expect(page.locator(".admin-blocks")).toContainText("Whole day");
   const blocked = await (await request.get(`/api/availability?from=${blockDay}&days=1`)).json();
   expect(blocked.days[0].slots.map(s => s.state)).toEqual(["taken", "taken", "taken"]);

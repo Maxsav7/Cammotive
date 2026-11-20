@@ -151,6 +151,8 @@ createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/__calendar") return send(res, 200, [...events.values()]);
     if (req.method === "GET" && url.pathname === "/__emails") return send(res, 200, emails);
     if (req.method === "GET" && url.pathname === "/__health") return send(res, 200, { ok: true });
+    // Every test comes from 127.0.0.1; this makes each one a fresh visitor for the rate limits.
+    if (req.method === "POST" && url.pathname === "/__forget-limits") { db.exec("DELETE FROM booking_limits"); return send(res, 200, { ok: true }); }
     send(res, 404, { error: "not found" });
   } catch (error) {
     // A constraint failure surfaces as a failed D1 request, like the real API.

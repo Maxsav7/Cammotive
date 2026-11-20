@@ -22,15 +22,15 @@ async function slotTaken(date: string, time: string) {
 // while the hold is live, or the booking's outcome. Never PII or tokens. A retry
 // that arrives while the first request is still creating the Stripe session (a
 // double click) waits briefly for it rather than reporting the slot as taken.
-async function replay(requestKey: string, fingerprint: string, calculated: object) {
+async function replay(requestKey: string, fingerprint: string, price: () => Promise<object>) {
   for (let attempt = 0; ; attempt++) {
     const row = await db.prepare(`SELECT b.code, b.fingerprint, b.status, b.created_at, p.checkout_url, p.hold_expires FROM secure_bookings b
       LEFT JOIN booking_payments p ON p.code = b.code WHERE b.request_key = ?`).bind(requestKey).first();
     if (!row) return null;
     if (row.fingerprint !== fingerprint) throw new HttpError(409, "This request key was already used. Start a new booking.");
-    if (row.status === "confirmed") return json({ confirmationCode: row.code, ...calculated, deposit: depositDollars, status: "confirmed" });
+    if (row.status === "confirmed") return json({ confirmationCode: row.code, ...await price(), deposit: depositDollars, status: "confirmed" });
     if (row.status === "pending" && row.checkout_url && Number(row.hold_expires) > Date.now() / 1000)
-      return json({ confirmationCode: row.code, ...calculated, deposit: depositDollars, status: "pending", checkoutUrl: row.checkout_url });
+      return json({ confirmationCode: row.code, ...await price(), deposit: depositDollars, status: "pending", checkoutUrl: row.checkout_url });
     const starting = row.status === "pending" && !row.checkout_url && Number(row.created_at) > Date.now() / 1000 - 30;
     if (!starting || attempt >= 40) throw new HttpError(409, "This booking wasn't paid in time, so the slot was released. Please choose a time again.");
     await new Promise(resolve => setTimeout(resolve, 250));
@@ -53,25 +53,35 @@ export async function POST(request: Request) {
     // page was open from before the terms changed: they need to read the new ones.
     if (acceptedTerms !== TERMS_VERSION) throw new HttpError(409, "Our Terms of Service have been updated. Please refresh the page, review them and tick the box again.");
     const fingerprint = await digest(JSON.stringify(details));
-    // $25 off a first visit. Decided here, on the server, and never reported on its
-    // own, so the booking form can't be used to check whether someone is a customer.
+    // $25 off a first visit, decided here on the server. The price has to be shown
+    // to whoever books, so it does say whether an email or phone has booked before;
+    // the bot check and the per-address and per-recipient limits below keep that
+    // from being used to look people up in bulk.
     const base = estimate(parsed.data);
-    const discount = await discountFor(details.packageId, details.email, details.phone, requestKey);
-    const calculated = { ...base, total: base.total - discount, discount };
-    const previous = await replay(requestKey, fingerprint, calculated);
+    let pricing: Promise<{ total: number; discount: number } & typeof base> | undefined;
+    const price = () => pricing ??= discountFor(details.packageId, details.email, details.phone, requestKey)
+      .then(discount => ({ ...base, total: base.total - discount, discount }));
+    // A retry of the same request (a double click, a dropped connection) reuses the
+    // same, already spent, bot token, so it's answered before the bot check.
+    const previous = await replay(requestKey, fingerprint, price);
     if (previous) return previous;
+    // Everything after this reads the database several times, so it's only done
+    // for a request that passed the bot check.
+    await verifyBot(turnstileToken, "booking");
+    await limitRequest(request, "create-day", 8, 86400);
+    const calculated = await price();
+    const { discount } = calculated;
     await releaseStaleHolds(details.date, details.time);
     if (await slotTaken(details.date, details.time)) {
-      const again = await replay(requestKey, fingerprint, calculated); // our own concurrent request may hold it
+      const again = await replay(requestKey, fingerprint, price); // our own concurrent request may hold it
       if (again) return again;
       throw new HttpError(409, TAKEN);
     }
     if (await slotBusyOnCalendar(details.date, details.time)) throw new HttpError(409, TAKEN);
     if (await isBlocked(details.date, details.time)) throw new HttpError(409, TAKEN);
-    await verifyBot(turnstileToken, "booking");
     await limit("recipient-email", details.email, 4, 86400);
     await limit("recipient-phone", details.phone, 4, 86400);
-    await limit("booking-budget", "global", 30, 86400);
+    await limit("booking-budget", "global", 60, 86400);
     const now = Math.floor(Date.now() / 1000);
     const code = `CAM-${token().slice(0, 12).toUpperCase()}`;
     // The accepted terms are kept with the booking, as evidence in case of a dispute.
@@ -87,7 +97,7 @@ export async function POST(request: Request) {
           await digest(await customerToken(code)), Math.floor(Date.parse(details.date + "T23:59:59Z") / 1000) + 30 * 86400,
           await digest(await camToken(code)), now, Math.floor(Date.parse(details.date + "T23:59:59Z") / 1000) + 400 * 86400, details.date).first();
     } catch (error) {
-      const again = await replay(requestKey, fingerprint, calculated);
+      const again = await replay(requestKey, fingerprint, price);
       if (again) return again;
       if (await slotTaken(details.date, details.time)) throw new HttpError(409, TAKEN);
       throw error;

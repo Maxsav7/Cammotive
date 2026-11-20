@@ -191,16 +191,21 @@ export default function BookingFlow() {
     try {
       const response = await fetch("/api/appointments", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": submission.current.key }, body: JSON.stringify({ ...payload, acceptedTerms: TERMS_VERSION, turnstileToken: botToken }) });
       const result = await response.json();
-      if (response.status === 409) {
-        submission.current = { signature: "", key: "" };
-        if (/taken|released/.test(result.error ?? "")) { setTime(""); go(3); setError(result.error); return; }
+      const started = response.ok && result.confirmationCode;
+      if (started && result.status !== "confirmed") {
+        save({ pkg, size, addOns, date, time, contact });
+        window.location.assign(result.checkoutUrl);
+        return; // keep the button busy while the browser leaves for Stripe
       }
-      if (!response.ok || !result.confirmationCode) { setError(result.error || `We couldn't start the payment. Please call or text ${PHONE}.`); return; }
-      if (result.status === "confirmed") { forget(); setDone({ code: result.confirmationCode, status: "confirmed", date, time, packageName: result.packageName, addOns: result.addOns, total: result.total, discount: result.discount, deposit: result.deposit }); return; }
-      save({ pkg, size, addOns, date, time, contact });
-      window.location.assign(result.checkoutUrl);
-      return; // keep the button busy while the browser leaves for Stripe
+      if (started) { forget(); setDone({ code: result.confirmationCode, status: "confirmed", date, time, packageName: result.packageName, addOns: result.addOns, total: result.total, discount: result.discount, deposit: result.deposit }); }
+      else if (response.status === 409 && /taken|released/.test(result.error ?? "")) { submission.current = { signature: "", key: "" }; setTime(""); go(3); setError(result.error); }
+      else {
+        if (response.status === 409) submission.current = { signature: "", key: "" };
+        setError(result.error || `We couldn't start the payment. Please call or text ${PHONE}.`);
+      }
     } catch { setError("Connection interrupted. Try again with the same details, or call Camotive."); }
+    // Anything but leaving for Stripe: the button works again, with a fresh security
+    // check (each one can be used only once).
     setBusy(false); setBotToken(""); setChallenge(v => v + 1);
   }
 

@@ -51,6 +51,12 @@ test("migrations apply cleanly over the legacy hand-written schema", async t => 
   assert.equal(Number((await database.prepare("SELECT count(*) AS n FROM appointments").first()).n), 1);
 });
 
+test("no code trusts identity headers that a client or proxy could set", () => {
+  const files = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? files(resolve(dir, e.name)) : /\.(ts|tsx|mjs|js)$/.test(e.name) ? [resolve(dir, e.name)] : []);
+  for (const file of [...files("app"), ...files("lib")])
+    assert.doesNotMatch(readFileSync(file, "utf8"), /oai-authenticated-user|x-user-email|x-authenticated-user/i, file);
+});
+
 for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
   test(`booking security parity: ${runtime}`, async t => {
     const originalFetch = globalThis.fetch; const originalEnv = { ...process.env };
@@ -70,6 +76,8 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     // are safe on a database that already has the legacy/hand-written schema.
     for (let pass = 0; pass < 2; pass++) for (const sql of migrationStatements()) await database.prepare(sql).run();
     let emails = [], failEmail = false, wrongHost = false, dbFailure = false, failOutboxInsert = false;
+    // Cloudflare D1 REST calls made so far: each one counts against Cam's Cloudflare API quota.
+    let dbCalls = 0;
     // Stripe stand-in: Checkout Sessions by id, refunds, and an outage switch.
     const stripeSessions = new Map(); let refunds = [], stripeDown = false;
     // Google Calendar stand-in: events by id, Cam's existing busy blocks, and an outage switch.
@@ -80,6 +88,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const googlePem = `${pemLabel("BEGIN")}\\n${Buffer.from(await crypto.subtle.exportKey("pkcs8", googleKeys.privateKey)).toString("base64").match(/.{1,64}/g).join("\\n")}\\n${pemLabel("END")}\\n`;
     globalThis.fetch = async (url, options) => {
       if (String(url).startsWith("https://api.cloudflare.com/")) {
+        dbCalls++;
         assert.equal(options.cache, "no-store");
         if (dbFailure) return Response.json({ success: false }, { status: 503 });
         const input = JSON.parse(options.body);
@@ -171,6 +180,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const availability = load(resolve(root, "app/api/availability/route.ts"));
     const admin = load(resolve(root, "app/api/admin/booking/route.ts"));
     const quote = load(resolve(root, "app/api/quote/route.ts"));
+    const status = load(resolve(root, "app/api/appointments/status/route.ts"));
     const chicagoDay = (offset = 0) => { const d = new Date(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date()) + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + offset); return d.toISOString().slice(0, 10); };
     const sealed = async id => security.unseal((await database.prepare("SELECT payload FROM booking_outbox WHERE id LIKE ?").bind(id).first()).payload);
     const adminLink = async () => { const text = (await sealed("%-cam")).text; const m = text.match(/#booking=(CAM-[A-F0-9]{12})&token=([a-f0-9]{64})/); return { code: m[1], token: m[2] }; };
@@ -186,6 +196,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
     const count = async table => Number((await database.prepare(`SELECT count(*) AS n FROM ${table}`).first()).n);
     const reset = async () => {
       await database.batch(["booking_outbox", "booking_payments", "secure_bookings", "booking_limits", "appointments", "customer_codes", "customer_sessions", "blocked_slots", "quote_requests", "admin_credentials", "first_visit_claims"].map(table => database.prepare(`DELETE FROM ${table}`)));
+      store.fullLimits?.clear();
       emails = []; failEmail = false; wrongHost = false; dbFailure = false; failOutboxInsert = false;
       googleEvents.clear(); googleBusy = []; googleDown = false;
       stripeSessions.clear(); refunds = []; stripeDown = false;
@@ -291,7 +302,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
       });
       await t.test("first visit: $25 off only the first booking per email and phone, past customers excluded, given back if Camotive cancels", async () => {
         await reset();
-        const fresh = () => database.prepare("DELETE FROM booking_limits").run();
+        const fresh = () => { store.fullLimits.clear(); return database.prepare("DELETE FROM booking_limits").run(); };
         const at = (time, more) => ({ ...valid(), time, ...more });
         const first = await book();
         assert.equal(first.discount, 25); assert.equal(first.total, 250);
@@ -315,7 +326,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         const maintenance = await (await route.POST(request({ ...valid(), packageId: "maintenance", addOnIds: [] }))).json();
         assert.equal(maintenance.discount, 0); assert.equal(maintenance.total, 125);
         // Premium already includes engine bay cleaning: it isn't charged again.
-        await database.prepare("DELETE FROM booking_limits").run();
+        await database.prepare("DELETE FROM booking_limits").run(); store.fullLimits.clear();
         const premium = await (await route.POST(request({ ...valid(), packageId: "premium", time: "12:00 PM", email: "premium@example.com", phone: "2105550144" }))).json();
         assert.equal(premium.total, 325 - 25, "$325 Premium, engine bay included, less the first-visit discount"); assert.equal(premium.addOns, "");
         // A retry of the first booking's own request still reports its discount.
@@ -428,7 +439,7 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         assert.equal((await route.POST(request({ ...data, time: "12:00 PM", email: "second@example.com", phone: "2105550124" }))).status, 201, "second slot that day is open");
         await pay(results[0].confirmationCode);
         assert.equal((await (await route.POST(request(data, key))).json()).status, "confirmed", "a retry after paying reports the booking");
-        await database.prepare("DELETE FROM booking_limits").run(); // fresh per-visitor allowance for the race
+        await database.prepare("DELETE FROM booking_limits").run(); store.fullLimits.clear(); // fresh per-visitor allowance for the race
         const racing = await Promise.all([3, 4].map(n => route.POST(request({ ...data, date: chicagoDay(9), email: `race${n}@example.com`, phone: `210555012${n}` }))));
         assert.deepEqual(racing.map(r => r.status).sort(), [201, 409], "two people racing for one slot: exactly one wins");
       });
@@ -726,9 +737,11 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
         const fourth = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
         assert.equal((await out(fourth, true)).status, 200);
         assert.equal((await view(fourth)).status, 401); assert.equal((await view(second)).status, 401, "sign out everywhere");
-        // Repeated sign-ins are rate limited per account (10 an hour), including correct ones.
-        assert.equal((await login("owner@example.com", "a brand new passphrase")).status, 429);
-        await database.prepare("DELETE FROM booking_limits").run();
+        // Repeated sign-ins from one address are rate limited (10 an hour per account and address), including correct ones.
+        let repeated = 201;
+        for (let i = 0; i < 10 && repeated !== 429; i++) repeated = (await login("owner@example.com", "a brand new passphrase")).status;
+        assert.equal(repeated, 429);
+        await database.prepare("DELETE FROM booking_limits").run(); store.fullLimits.clear(); // the hour passes
         // Active sessions renew: an old session is extended when used.
         const fifth = (await (await login("owner@example.com", "a brand new passphrase")).json()).session;
         await database.prepare("UPDATE customer_sessions SET expires = ?").bind(Math.floor(Date.now() / 1000) + 3600).run();
@@ -791,6 +804,64 @@ for (const runtime of ["vercel-rest", "cloudflare-binding"]) {
           assert.deepEqual((await slots(chicagoDay(5), 1)).days[0].slots.map(s => s.state), ["taken", "taken", "taken"], "the text-booking calendar honors blocks");
           assert.equal((await route.POST(request(valid()))).status, 503, "online booking itself stays off");
         } finally { process.env.BOOKING_ENABLED = saved.enabled; process.env.STRIPE_SECRET_KEY = saved.stripe; }
+      });
+      if (runtime === "vercel-rest") await t.test("once a limit is full, further requests are refused without database calls", async () => {
+        await reset();
+        await store.limit("flood", "same", 2); await store.limit("flood", "same", 2);
+        await assert.rejects(store.limit("flood", "same", 2), { status: 429 });
+        const before = dbCalls;
+        for (let i = 0; i < 20; i++) await assert.rejects(store.limit("flood", "same", 2), { status: 429 });
+        assert.equal(dbCalls - before, 0, "a flood past the limit costs no Cloudflare API calls");
+        await store.limit("flood", "someone-else", 2); // other people are unaffected
+      });
+      if (runtime === "vercel-rest") await t.test("the booking status check reads the database at most once a minute", async () => {
+        await reset(); const before = dbCalls;
+        for (let i = 0; i < 10; i++) assert.equal((await (await status.GET()).json()).enabled, true);
+        assert.ok(dbCalls - before <= 1, `${dbCalls - before} database calls for 10 status checks`);
+      });
+      await t.test("availability is limited per address even while booking is off, and the CDN may cache it briefly", async () => {
+        await reset();
+        process.env.BOOKING_ENABLED = "false";
+        try {
+          const before = dbCalls;
+          const response = await availability.GET(new Request(`https://booking.example.com/api/availability?from=${future(3)}&days=3`));
+          assert.equal(response.status, 200);
+          assert.equal(await count("booking_limits"), 1, "the request was counted");
+          assert.match(response.headers.get("cache-control"), /public, s-maxage=\d+/);
+          if (runtime === "vercel-rest") assert.equal(dbCalls - before, 2, "one call for the limit, one for the calendar");
+        } finally { process.env.BOOKING_ENABLED = "true"; }
+        const refused = await availability.GET(new Request(`https://booking.example.com/api/availability?from=${future(3)}&days=999`));
+        assert.match(refused.headers.get("cache-control"), /no-store/, "errors are never cached");
+      });
+      if (runtime === "vercel-rest") await t.test("the bot check comes before a booking reads the database", async () => {
+        await reset(); const before = dbCalls;
+        assert.equal((await route.POST(request({ ...valid(), turnstileToken: "invalid" }))).status, 400);
+        assert.ok(dbCalls - before <= 2, `${dbCalls - before} database calls before the bot check`);
+      });
+      await t.test("one address can start at most 8 bookings a day", async () => {
+        await reset();
+        const open = (await slots(future(7), 7)).days.flatMap(d => d.slots.filter(s => s.state === "open").map(s => ({ date: d.date, time: s.time })));
+        for (let i = 0; i < 9; i++) {
+          const response = await route.POST(request({ ...valid(), ...open[i], email: `address${i}@example.com`, phone: `21055502${String(i).padStart(2, "0")}` }));
+          assert.equal(response.status, i < 8 ? 201 : 429, `booking ${i + 1}`);
+        }
+      });
+      await t.test("strangers can't use up the owner's daily sign-in code budget", async () => {
+        await reset();
+        const from = ip => ({ "x-vercel-forwarded-for": ip, "cf-connecting-ip": ip });
+        for (let i = 0; i < 31; i++)
+          assert.equal((await post(adminCode.POST, "/api/admin/code", { email: `stranger${i}@example.com`, turnstileToken: "valid-recovery" }, from(`10.0.${Math.floor(i / 9)}.${i}`))).status, 202, `stranger ${i + 1}`);
+        assert.equal((await post(adminCode.POST, "/api/admin/code", { email: "owner@example.com", turnstileToken: "valid-recovery" }, from("10.9.9.9"))).status, 202);
+        assert.ok(await database.prepare("SELECT 1 FROM booking_outbox WHERE id LIKE 'admin-signin-%'").first(), "the owner still gets a code");
+      });
+      await t.test("wrong passwords from one address don't lock the owner out everywhere", async () => {
+        await reset();
+        await adminSession(); // sets "correct horse battery"
+        const from = ip => ({ "x-vercel-forwarded-for": ip, "cf-connecting-ip": ip });
+        const login = (password, ip) => post(adminSignin.POST, "/api/admin/session", { email: "owner@example.com", password }, from(ip));
+        for (let i = 0; i < 10; i++) assert.equal((await login("wrong horse battery", "203.0.113.7")).status, 401, `attempt ${i + 1}`);
+        assert.equal((await login("wrong horse battery", "203.0.113.7")).status, 429, "that address is slowed down");
+        assert.equal((await login("correct horse battery", "198.51.100.4")).status, 201, "the owner can still sign in");
       });
       if (runtime === "vercel-rest") await t.test("REST database failure doesn't permit booking", async () => {
         await reset(); dbFailure = true; assert.equal((await route.POST(request(valid()))).status, 503);
